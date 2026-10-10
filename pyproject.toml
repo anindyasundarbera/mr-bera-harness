@@ -14,7 +14,15 @@ license = "LicenseRef-Proprietary"
 dependencies = ["PyYAML>=6.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.10", "types-PyYAML"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    # Pinned: an unpinned linter lets local and CI disagree on the same file,
+    # which makes a green local run meaningless as evidence.
+    "ruff==0.16.1",
+    "mypy>=1.10",
+    "types-PyYAML",
+]
 postgres = ["psycopg[binary]>=3.1"]
 
 [project.scripts]

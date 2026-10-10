@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from harness.config import Config
 
+
 # The repository the command was invoked in, not the package's own location.
 #
 # This was `Path(__file__).resolve().parent.parent`, which resolves to the

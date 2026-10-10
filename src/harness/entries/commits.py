@@ -22,6 +22,7 @@ import re
 import subprocess
 from pathlib import Path
 
+
 # The repository the command was invoked in, not the package's own location.
 #
 # This was `Path(__file__).resolve().parent.parent`, which resolves to the
