@@ -30,12 +30,13 @@ import sys
 from pathlib import Path
 
 from harness import __version__
-from harness.config import ConfigError, describe, load_config
+from harness.config import Config, ConfigError, describe, load_config
 from harness.routing import resolve_context
 from harness.routing.resolve import render
 
 
-def _config(args: argparse.Namespace):
+def _config(args: argparse.Namespace) -> Config:
+    """Load the project configuration, failing loudly when absent."""
     root = Path(args.root) if getattr(args, "root", None) else Path.cwd()
     return load_config(root, required=True)
 
@@ -139,8 +140,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             f"entries           : {len(result.entries)} entr(ies), "
             f"{len(result.problems)} problem(s)"
         )
-        for problem in result.problems:
-            print(f"  ! {problem}")
+        for entry_problem in result.problems:
+            print(f"  ! {entry_problem}")
         failures += len(result.problems)
 
     print()

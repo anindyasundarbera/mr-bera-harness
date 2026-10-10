@@ -165,10 +165,11 @@ def validate(
 ) -> Report:
     """Run the routing checks over a bundle."""
     report = Report()
-    decomposition_ids = (
-        decomposition_ids if decomposition_ids is not None else known_decomposition_ids()
-    )
-    modules = modules if modules is not None else known_modules()
+    # Callers supply these from configuration. The standalone version resolved
+    # them from module-level constants, which is why the no-argument form existed;
+    # leaving it would have raised at runtime for any caller that omitted them.
+    decomposition_ids = decomposition_ids or set()
+    modules = modules or set()
     gap_states_map = gaps if gaps is not None else {}
 
     try:

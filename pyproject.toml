@@ -7,7 +7,9 @@ name = "mr-bera-harness"
 version = "0.1.0"
 description = "Deterministic session harness: the LLM proposes, the harness disposes"
 readme = "README.md"
-requires-python = ">=3.10"
+# tomllib is stdlib from 3.11. The harness is new and has no 3.10 consumers, so
+# the floor is raised rather than adding `tomli` as a dependency.
+requires-python = ">=3.11"
 license = "LicenseRef-Proprietary"
 dependencies = ["PyYAML>=6.0"]
 
@@ -54,7 +56,7 @@ ignore = ["E501", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004"]
 "tests/*" = ["ARG001", "ARG002", "S101"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 files = ["src"]
 strict = true
 warn_unreachable = true
