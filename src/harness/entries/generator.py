@@ -17,8 +17,8 @@ than silently dropping an entry from the generated output.
 Usage
 -----
     python3 tools/entries.py validate            # schema + uniqueness checks
-    python3 tools/entries.py generate            # rewrite the two index files
-    python3 tools/entries.py generate --check    # fail if regeneration would change
+    harness entries generate            # rewrite the two index files
+    harness entries generate --check    # fail if regeneration would change
 
 Exit codes: 0 = clean, 1 = problems, 2 = usage error.
 """
@@ -32,26 +32,33 @@ from typing import Any
 
 from harness.okf import OkfError, parse_timestamp, split_frontmatter
 
-# Module location is src/harness/entries/generator.py, so the project root is
-# three levels up. An earlier value of parent.parent pointed at src/, which made
-# the CLI read a different tree than a caller passing explicit paths — so
-# `--check` reported drift that did not exist.
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-CHANGELOG_MD = _PROJECT_ROOT / "CHANGELOG.md"
-DECISIONS_INDEX_MD = _PROJECT_ROOT / "docs" / "DECISIONS_INDEX.md"
+
+def default_project_root() -> Path:
+    """The project the command was invoked in, not the harness's own location.
+
+    This was `Path(__file__).resolve().parents[3]`, which resolves to the
+    *harness* repository. Running `harness entries generate` inside a consumer
+    therefore wrote `CHANGELOG.md` and `docs/DECISIONS_INDEX.md` into the
+    harness's own working tree — silently modifying a different repository. The
+    current working directory is the only correct answer.
+    """
+    return Path.cwd()
 
 
 def _default_dirs() -> tuple[Path, Path]:
-    """Entry directories, taken from the project's own `harness.toml`.
-
-    These were module-level constants pointing at one fixed layout, which meant a
-    repository that kept its entries elsewhere was silently validated as empty.
-    Reading the configuration keeps `validate_all()` honest by default.
-    """
+    """Entry directories, taken from the project's own `harness.toml`."""
     from harness.config import load_config  # noqa: PLC0415 - deferred to avoid a cycle
 
-    config = load_config(_PROJECT_ROOT)
+    config = load_config(default_project_root())
     return config.path("changelog"), config.path("decisions")
+
+
+def _default_targets() -> tuple[Path, Path]:
+    """Generated-file locations, taken from the project's own `harness.toml`."""
+    from harness.config import load_config  # noqa: PLC0415 - deferred to avoid a cycle
+
+    config = load_config(default_project_root())
+    return config.root / "CHANGELOG.md", config.path("docs") / "DECISIONS_INDEX.md"
 
 
 CHANGELOG_KINDS = frozenset({"added", "changed", "fixed", "removed", "deprecated", "security"})
@@ -244,7 +251,7 @@ def render_changelog(entries: list[Entry]) -> str:
         "# Changelog",
         "",
         "> **Generated file — do not edit by hand.**",
-        "> Regenerate with `python3 tools/entries.py generate`.",
+        "> Regenerate with `harness entries generate`.",
         "> The authoritative entries live in `knowledge/changelog/`.",
         "",
     ]
@@ -282,7 +289,7 @@ def render_decisions_index(entries: list[Entry]) -> str:
         "# Architecture Decision Index",
         "",
         "> **Generated file — do not edit by hand.**",
-        "> Regenerate with `python3 tools/entries.py generate`.",
+        "> Regenerate with `harness entries generate`.",
         "> The authoritative entries live in `knowledge/decisions/`.",
         "",
         "| ID | Date | Title | Status | Supersedes |",
@@ -303,14 +310,20 @@ def generate(
     check: bool = False,
     changelog_dir: Path | None = None,
     decisions_dir: Path | None = None,
-    changelog_md: Path = CHANGELOG_MD,
-    decisions_index_md: Path = DECISIONS_INDEX_MD,
+    changelog_md: Path | None = None,
+    decisions_index_md: Path | None = None,
 ) -> tuple[int, list[str]]:
     """Write (or verify) the generated index files. Returns (exit_code, messages).
 
     Directories and targets are injectable so generation can be tested against a
-    temporary tree rather than the live repository.
+    temporary tree rather than the live repository. When omitted, both are read
+    from the invoking project's `harness.toml`.
     """
+    if changelog_md is None or decisions_index_md is None:
+        default_changelog_md, default_index_md = _default_targets()
+        changelog_md = changelog_md or default_changelog_md
+        decisions_index_md = decisions_index_md or default_index_md
+
     result = validate_all(changelog_dir, decisions_dir)
     if not result.ok:
         return 1, [str(p) for p in result.problems]
@@ -345,6 +358,6 @@ def generate(
 
 def _display(path: Path) -> str:
     try:
-        return str(path.relative_to(_PROJECT_ROOT))
+        return str(path.relative_to(default_project_root()))
     except ValueError:
         return str(path)

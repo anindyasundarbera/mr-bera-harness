@@ -152,6 +152,157 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_guards(args: argparse.Namespace) -> int:
+    """Run the pre-session checks. Exit 1 when any guard fails."""
+    import json as _json  # noqa: PLC0415 - deferred so --help stays fast
+
+    from harness.guards.session import run_all  # noqa: PLC0415 - deferred so --help stays fast
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    branch = args.branch or None
+    findings = run_all(branch, config, config.root)
+    failures = [f for f in findings if not f.ok]
+
+    if args.json:
+        print(
+            _json.dumps(
+                {
+                    "passed": not failures,
+                    "findings": [
+                        {"guard": f.guard, "ok": f.ok, "detail": f.detail} for f in findings
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return 1 if failures else 0
+
+    print("branch guards")
+    for finding in findings:
+        print(f"  {'PASS' if finding.ok else 'FAIL'}  {finding.guard:<16} {finding.detail}")
+    print()
+    if failures:
+        print(f"GUARDS FAILED ({len(failures)}) — resolve before doing work.")
+        print("These guards are advisory: see ADR-2026-002.")
+        return 1
+    print("All guards passed — session may proceed.")
+    return 0
+
+
+def cmd_commits(args: argparse.Namespace) -> int:
+    """Validate commit messages against the configured convention."""
+    from harness.entries.commits import (  # noqa: PLC0415 - deferred so --help stays fast
+        check,
+        commits_in_range,
+        default_range,
+    )
+
+    if args.message is not None:
+        problems = check(args.message)
+        for problem in problems:
+            print(f"  ! {problem}")
+        return 1 if problems else 0
+
+    rev_range = args.rev_range or default_range()
+    try:
+        commits = commits_in_range(rev_range)
+    except SystemExit as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    failed = 0
+    print(f"range: {rev_range}  ({len(commits)} commit(s))")
+    for sha, subject, body in commits:
+        problems = check(subject, body)
+        if problems:
+            failed += 1
+            print(f"  FAIL  {sha[:8]}  {subject}")
+            for problem in problems:
+                print(f"          {problem}")
+        else:
+            print(f"  OK    {sha[:8]}  {subject}")
+
+    if failed:
+        print(f"\nconvention: FAILED ({failed} of {len(commits)})")
+        return 1
+    print(f"\nconvention: holds across {len(commits)} commit(s)")
+    return 0
+
+
+def cmd_entries(args: argparse.Namespace) -> int:
+    """Validate, or generate, the changelog and ADR indexes."""
+    from harness.entries.generator import (  # noqa: PLC0415 - deferred so --help stays fast
+        generate,
+        validate_all,
+    )
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    changelog, decisions = config.path("changelog"), config.path("decisions")
+
+    if args.entries_command == "generate":
+        code, messages = generate(
+            check=args.check,
+            changelog_dir=changelog,
+            decisions_dir=decisions,
+        )
+        for message in messages:
+            print(message)
+        return code
+
+    result = validate_all(changelog, decisions)
+    print(f"entries: {len(result.entries)}")
+    for entry in result.entries:
+        print(f"  - {entry.id}  [{entry.kind}]  {entry.date}  {entry.title}")
+    print(f"problems: {len(result.problems)}")
+    for problem in result.problems:
+        print(f"  ! {problem}")
+    return 0 if result.ok else 1
+
+
+def cmd_ci(args: argparse.Namespace) -> int:
+    """Rehearse the project's pipeline, and check parity against its CI."""
+    from harness.ci.rehearse import (  # noqa: PLC0415 - deferred so --help stays fast
+        default_pipeline,
+        run_stage,
+        workflow_jobs,
+    )
+
+    pipeline = default_pipeline()
+    failures: list[str] = []
+    for stage in pipeline.stages:
+        passed, messages = run_stage(stage)
+        print(f"[{stage.name}] {stage.description}")
+        for message in messages:
+            print(message)
+        if not passed:
+            failures.append(stage.name)
+        print()
+
+    workflow = args.workflow
+    if workflow:
+        result = pipeline.parity(workflow_jobs(Path(workflow)))
+        print(f"[parity] local stages vs {workflow}")
+        print(f"  missing locally: {result.missing or 'none'}")
+        print(f"  extra locally  : {result.extra or 'none'}")
+        print()
+
+    if failures:
+        print(f"RESULT: FAILED — {', '.join(failures)}")
+        return 1
+    print("RESULT: PASSED")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -172,6 +323,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("conform", help="OKF v0.2 conformance of the bundle")
     p.set_defaults(func=cmd_conform)
+
+    p = sub.add_parser("guards", help="run the pre-session checks")
+    p.add_argument("--branch", help="check as if on this branch")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_guards)
+
+    p = sub.add_parser("commits", help="validate commit messages")
+    p.add_argument("rev_range", nargs="?", help="git range, e.g. main..HEAD")
+    p.add_argument("--message", help="check a single message and exit")
+    p.set_defaults(func=cmd_commits)
+
+    p = sub.add_parser("entries", help="validate or generate changelog/ADR indexes")
+    entries_sub = p.add_subparsers(dest="entries_command", required=True)
+    entries_sub.add_parser("validate", help="validate entry schema and uniqueness")
+    gen = entries_sub.add_parser("generate", help="write the generated index files")
+    gen.add_argument("--check", action="store_true", help="fail if regeneration would differ")
+    p.set_defaults(func=cmd_entries)
+
+    p = sub.add_parser("ci", help="rehearse the project's pipeline locally")
+    p.add_argument("--workflow", help="path to a CI workflow, for the parity check")
+    p.set_defaults(func=cmd_ci)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)
