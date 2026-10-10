@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Refuse a direct push to the default branch. Advisory: bypassable with
+# --no-verify, and GitHub cannot enforce protection on a free private repo.
+set -eu
+DEFAULT_BRANCH="${MRB_DEFAULT_BRANCH:-main}"
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ -z "${remote_ref:-}" ] && continue
+  case "$remote_ref" in
+    "refs/heads/$DEFAULT_BRANCH")
+      echo "PUSH BLOCKED: direct push to '$DEFAULT_BRANCH' is not allowed." >&2
+      echo "Create a feature branch and open a pull request." >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0

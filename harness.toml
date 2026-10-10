@@ -1,0 +1,23 @@
+# The harness configures itself with the same mechanism it offers consumers.
+# Dogfooding: if this file is wrong, `harness doctor` says so.
+
+[identity]
+name = "mr-bera-harness"
+id_prefix = "MRB"
+levels = ["M", "S", "C", "W", "A"]
+widths = [2, 2, 2, 2, 2]
+
+[paths]
+docs = "docs"
+knowledge = "knowledge"
+changelog = "knowledge/changelog"
+decisions = "knowledge/decisions"
+tests = "tests"
+tools = "src"
+
+[guards]
+branch_prefixes = ["feat", "fix", "docs", "chore", "refactor", "test", "ci", "integration"]
+protected_branches = ["main", "master"]
+
+[commits]
+types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
