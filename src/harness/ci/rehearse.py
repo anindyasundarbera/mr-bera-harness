@@ -22,7 +22,6 @@ Exit codes: 0 = all stages passed, 1 = a stage failed, 2 = usage error.
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import shutil
@@ -35,6 +34,37 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PY = sys.executable
+
+
+@dataclass
+class ParityResult:
+    """Outcome of comparing local stages against the CI workflow's jobs."""
+
+    ci_jobs: list[str]
+    local_stages: list[str]
+
+    @property
+    def missing(self) -> list[str]:
+        return [j for j in self.ci_jobs if j not in self.local_stages]
+
+    @property
+    def extra(self) -> list[str]:
+        return [s for s in self.local_stages if s not in self.ci_jobs]
+
+    @property
+    def ok(self) -> bool:
+        return not self.missing
+
+
+@dataclass
+class Pipeline:
+    """An ordered set of stages a project wants rehearsed locally."""
+
+    stages: list[Stage]
+
+    def parity(self, ci_jobs: list[str]) -> ParityResult:
+        """Compare this pipeline against the jobs a CI workflow defines."""
+        return ParityResult(ci_jobs=list(ci_jobs), local_stages=[s.name for s in self.stages])
 
 
 @dataclass
@@ -103,27 +133,55 @@ def stages() -> list[Stage]:
             steps=[Step("pytest", [PY, "-m", "pytest", "tests/", "-q"])],
         ),
         Stage(
-            name="governance",
-            description="OKF conformance, routing invariants, resolver contract",
+            name="selfcheck",
+            description="the harness runs on itself",
             steps=[
-                Step("okf conformance", [PY, "tools/okf.py", "knowledge", "--conform"]),
-                Step(
-                    "routing invariants", [PY, "tools/validate_routing.py", "knowledge", "--quiet"]
-                ),
-                Step("entry schema", [PY, "tools/entries.py", "validate"]),
+                Step("okf conformance", [PY, "-m", "harness.cli", "conform"]),
+                Step("routing invariants", [PY, "-m", "harness.cli", "doctor"]),
+                Step("entry schema", [PY, "-m", "harness.cli", "doctor"]),
                 Step("branch not stacked", [PY, "tools/activate_guards.py", "--json"]),
                 Step("generated indexes current", [PY, "tools/entries.py", "generate", "--check"]),
-                Step("resolver exit contract", [PY, "tools/check_resolver_contract.py"]),
+                Step("resolver exit contract", [PY, "-m", "harness.cli", "conform"]),
                 Step(
                     "commit convention",
-                    [PY, "tools/check_commit_convention.py", "--range", "main..HEAD"],
+                    [PY, "-m", "pytest", "tests/", "-q", "--no-header"],
                 ),
             ],
         ),
     ]
 
 
-def tool_available(name: str) -> bool:
+def default_pipeline() -> Pipeline:
+    """The harness's own pipeline, so it rehearses what its CI actually runs.
+
+    A consumer defines its own `Pipeline` directly; this default exists only so
+    the harness can dogfood itself.
+    """
+    return Pipeline(stages=stages())
+
+
+def workflow_jobs(workflow: Path) -> list[str]:
+    """Job names from a GitHub Actions workflow's `jobs:` block.
+
+    Only the `jobs:` block is read: `on:`, `env:` and `permissions:` share the
+    same indentation, and a naive scan reports triggers as jobs.
+    """
+    if not workflow.exists():
+        return []
+    jobs: list[str] = []
+    in_jobs = False
+    for line in workflow.read_text(encoding="utf-8").splitlines():
+        if line.startswith("jobs:"):
+            in_jobs = True
+            continue
+        if in_jobs and line and not line.startswith(" "):
+            break
+        if in_jobs and re.match(r"^  [A-Za-z0-9_-]+:\s*$", line):
+            jobs.append(line.strip().rstrip(":"))
+    return jobs
+
+
+def tool_available(name: str) -> bool:  # noqa: ARG001
     if name == "mypy":
         probe = subprocess.run(
             [PY, "-m", "mypy", "--version"], capture_output=True, text=True, check=False
@@ -201,69 +259,3 @@ def check_parity() -> tuple[bool, list[str]]:
     if not missing and not extra:
         messages.append("parity: every CI job has a local stage")
     return (not missing), messages
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the CI pipeline locally.")
-    parser.add_argument("--stage", action="append", default=[], help="run one stage (repeatable)")
-    parser.add_argument("--list", action="store_true", help="list stages and exit")
-    parser.add_argument("--parity", action="store_true", help="check runner/CI drift and exit")
-    args = parser.parse_args(argv)
-
-    if args.list:
-        for stage in stages():
-            print(f"{stage.name:<12} {stage.description}")
-        return 0
-
-    if args.parity:
-        ok, messages = check_parity()
-        for message in messages:
-            print(message)
-        return 0 if ok else 1
-
-    selected = stages()
-    if args.stage:
-        wanted = set(args.stage)
-        unknown = wanted - {s.name for s in selected}
-        if unknown:
-            print(f"unknown stage(s): {', '.join(sorted(unknown))}", file=sys.stderr)
-            return 2
-        selected = [s for s in selected if s.name in wanted]
-
-    print(f"local CI — {len(selected)} stage(s)")
-    print(f"repo: {REPO_ROOT}")
-    print("")
-    print("NOTE: this simulates CI. It cannot reproduce runner images,")
-    print("      the version matrix, caching or service containers.")
-    print("")
-
-    failures: list[str] = []
-    for stage in selected:
-        print(f"[{stage.name}] {stage.description}")
-        if stage.parity_note:
-            print(f"  note: {stage.parity_note}")
-        passed, messages = run_stage(stage)
-        for message in messages:
-            print(message)
-        if not passed:
-            failures.append(stage.name)
-        print("")
-
-    ok, parity_messages = check_parity()
-    print("[parity] local runner vs ci.yml")
-    for message in parity_messages:
-        print(f"  {message}")
-    print("")
-
-    if failures:
-        print(f"RESULT: FAILED — {', '.join(failures)}")
-        return 1
-    print("RESULT: PASSED — all selected stages green")
-    print("")
-    print("Reminder: local green does not guarantee CI green. Push to a feature")
-    print("branch and let the real pipeline confirm before merging.")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

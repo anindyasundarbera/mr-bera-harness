@@ -112,13 +112,17 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print()
     failures = 0
 
-    bundle = Bundle(config.path("knowledge"))
-    problems = bundle.check()
-    print(f"okf concepts      : {len(bundle.concepts())}")
-    print(f"okf conformance   : {'clean' if not problems else f'{len(problems)} problem(s)'}")
-    for problem in problems:
-        print(f"  ! {problem}")
-    failures += len(problems)
+    knowledge = config.path("knowledge")
+    if not knowledge.is_dir():
+        print(f"okf bundle        : {knowledge} does not exist; skipped")
+    else:
+        bundle = Bundle(knowledge)
+        problems = bundle.check()
+        print(f"okf concepts      : {len(bundle.concepts())}")
+        print(f"okf conformance   : {'clean' if not problems else f'{len(problems)} problem(s)'}")
+        for problem in problems:
+            print(f"  ! {problem}")
+        failures += len(problems)
 
     report = validate_routing(config)
     print(f"routing invariants: {len(report.violations)} violation(s)")

@@ -18,10 +18,8 @@ Exit codes: 0 = clean, 1 = violations, 2 = usage error.
 
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -181,49 +179,3 @@ def default_range() -> str:
     # empty but unresolvable, which made this tool exit 2 in CI while passing
     # locally.
     return "HEAD"
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check commit messages.")
-    parser.add_argument("--range", dest="rev_range", default=None)
-    parser.add_argument("--message", default=None, help="check a single message and exit")
-    args = parser.parse_args(argv)
-
-    if args.message is not None:
-        problems = check(args.message)
-        for p in problems:
-            print(f"  ! {p}")
-        return 1 if problems else 0
-
-    rev_range = args.rev_range or default_range()
-    try:
-        commits = commits_in_range(rev_range)
-    except SystemExit as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-
-    if not commits:
-        print(f"no commits in range {rev_range}")
-        return 0
-
-    failed = 0
-    print(f"range: {rev_range}  ({len(commits)} commit(s))")
-    for sha, subject, body in commits:
-        problems = check(subject, body)
-        if problems:
-            failed += 1
-            print(f"  FAIL  {sha[:8]}  {subject}")
-            for p in problems:
-                print(f"          {p}")
-        else:
-            print(f"  OK    {sha[:8]}  {subject}")
-
-    if failed:
-        print(f"\nconvention: FAILED ({failed} of {len(commits)})")
-        return 1
-    print(f"\nconvention: holds across {len(commits)} commit(s)")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -25,7 +25,6 @@ Exit codes: 0 = clean, 1 = problems, 2 = usage error.
 
 from __future__ import annotations
 
-import argparse
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -332,33 +331,3 @@ def _display(path: Path) -> str:
         return str(path.relative_to(_PROJECT_ROOT))
     except ValueError:
         return str(path)
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate and index changelog/ADR entries.")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("validate", help="validate entry schema and uniqueness")
-    gen = sub.add_parser("generate", help="write the generated index files")
-    gen.add_argument("--check", action="store_true", help="fail if regeneration would differ")
-
-    args = parser.parse_args(argv)
-
-    if args.command == "validate":
-        result = validate_all()
-        print(f"entries: {len(result.entries)}")
-        for entry in result.entries:
-            print(f"  - {entry.id}  [{entry.kind}]  {entry.date}  {entry.title}")
-        print(f"problems: {len(result.problems)}")
-        for problem in result.problems:
-            print(f"  ! {problem}")
-        return 0 if result.ok else 1
-
-    code, messages = generate(check=args.check)
-    for message in messages:
-        print(message)
-    return code
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
