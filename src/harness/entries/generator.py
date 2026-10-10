@@ -37,10 +37,22 @@ from harness.okf import OkfError, parse_timestamp, split_frontmatter
 # the CLI read a different tree than a caller passing explicit paths — so
 # `--check` reported drift that did not exist.
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-CHANGELOG_DIR = _PROJECT_ROOT / "knowledge" / "changelog"
-DECISIONS_DIR = _PROJECT_ROOT / "knowledge" / "decisions"
 CHANGELOG_MD = _PROJECT_ROOT / "CHANGELOG.md"
 DECISIONS_INDEX_MD = _PROJECT_ROOT / "docs" / "DECISIONS_INDEX.md"
+
+
+def _default_dirs() -> tuple[Path, Path]:
+    """Entry directories, taken from the project's own `harness.toml`.
+
+    These were module-level constants pointing at one fixed layout, which meant a
+    repository that kept its entries elsewhere was silently validated as empty.
+    Reading the configuration keeps `validate_all()` honest by default.
+    """
+    from harness.config import load_config  # noqa: PLC0415 - deferred to avoid a cycle
+
+    config = load_config(_PROJECT_ROOT)
+    return config.path("changelog"), config.path("decisions")
+
 
 CHANGELOG_KINDS = frozenset({"added", "changed", "fixed", "removed", "deprecated", "security"})
 ADR_STATUSES = frozenset(
@@ -183,9 +195,14 @@ def validate_adr_entry(entry: Entry) -> list[Problem]:
 
 
 def validate_all(
-    changelog_dir: Path = CHANGELOG_DIR, decisions_dir: Path = DECISIONS_DIR
+    changelog_dir: Path | None = None, decisions_dir: Path | None = None
 ) -> ValidationResult:
     """Validate every entry and check global uniqueness."""
+    if changelog_dir is None or decisions_dir is None:
+        default_changelog, default_decisions = _default_dirs()
+        changelog_dir = changelog_dir or default_changelog
+        decisions_dir = decisions_dir or default_decisions
+
     result = ValidationResult()
 
     changes, problems = load_entries(changelog_dir, "changelog")
@@ -284,8 +301,8 @@ def render_decisions_index(entries: list[Entry]) -> str:
 def generate(
     *,
     check: bool = False,
-    changelog_dir: Path = CHANGELOG_DIR,
-    decisions_dir: Path = DECISIONS_DIR,
+    changelog_dir: Path | None = None,
+    decisions_dir: Path | None = None,
     changelog_md: Path = CHANGELOG_MD,
     decisions_index_md: Path = DECISIONS_INDEX_MD,
 ) -> tuple[int, list[str]]:
