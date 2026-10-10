@@ -39,7 +39,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from harness.config import Config
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# The repository the command was invoked in, not the package's own location.
+#
+# This was `Path(__file__).resolve().parent.parent`, which resolves to the
+# harness's installation directory. Git commands then ran there and failed with
+# "not a git repository", or worse, operated on the wrong repository entirely.
+# The invoking directory is the only correct answer.
+def repo_root() -> Path:
+    """Return the git working directory the command was invoked in."""
+    return Path.cwd()
+
+
+REPO_ROOT = repo_root()
 
 # Branches a coding agent may work on. `main` is deliberately excluded.
 # Defaults; a project overrides these through `harness.toml`. The defaults exist
@@ -104,7 +115,7 @@ def git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]
     helpers at a different repository without mutating module state.
     """
     return subprocess.run(  # noqa: S603
-        ["git", *args], cwd=cwd or REPO_ROOT, capture_output=True, text=True, check=False
+        ["git", *args], cwd=cwd or repo_root(), capture_output=True, text=True, check=False
     )
 
 
@@ -186,7 +197,7 @@ def guard_index_clean_of_secrets(config: Config | None = None) -> Finding:
 def guard_status_clean_of_markers(root: Path | None = None) -> Finding:
     """A conflict marker in a tracked file means a merge was left half-resolved."""
     proc = git("ls-files", "*.py", "*.md", "*.yml", "*.yaml", "*.toml")
-    base = root or REPO_ROOT
+    base = root or repo_root()
     hits: list[str] = []
     for rel in proc.stdout.splitlines()[:400]:
         path = base / rel

@@ -22,7 +22,18 @@ import re
 import subprocess
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# The repository the command was invoked in, not the package's own location.
+#
+# This was `Path(__file__).resolve().parent.parent`, which resolves to the
+# harness's installation directory. Git commands then ran there and failed with
+# "not a git repository", or worse, operated on the wrong repository entirely.
+# The invoking directory is the only correct answer.
+def repo_root() -> Path:
+    """Return the git working directory the command was invoked in."""
+    return Path.cwd()
+
+
+REPO_ROOT = repo_root()
 
 # The Angular-derived type set, which conventionalcommits.org names explicitly.
 TYPES = frozenset(
@@ -97,7 +108,7 @@ def _resolve_range(rev_range: str) -> None:
 
     exists = subprocess.run(  # noqa: S603
         ["git", "rev-parse", "--verify", "--quiet", base],
-        cwd=REPO_ROOT,
+        cwd=repo_root(),
         capture_output=True,
         text=True,
         check=False,
@@ -115,7 +126,7 @@ def _resolve_range(rev_range: str) -> None:
             remote,
             f"+refs/heads/{branch}:refs/remotes/{base}",
         ],
-        cwd=REPO_ROOT,
+        cwd=repo_root(),
         capture_output=True,
         text=True,
         check=False,
@@ -126,7 +137,7 @@ def _git_log(rev_range: str) -> subprocess.CompletedProcess[str]:
     sep = "\x1f"
     return subprocess.run(  # noqa: S603
         ["git", "log", f"--format=%H{sep}%s{sep}%b\x1e", rev_range],
-        cwd=REPO_ROOT,
+        cwd=repo_root(),
         capture_output=True,
         text=True,
         check=False,
@@ -167,7 +178,7 @@ def default_range() -> str:
         base = candidate.split("..")[0]
         proc = subprocess.run(  # noqa: S603
             ["git", "rev-parse", "--verify", "--quiet", base],
-            cwd=REPO_ROOT,
+            cwd=repo_root(),
             capture_output=True,
             text=True,
             check=False,

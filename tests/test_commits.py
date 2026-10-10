@@ -6,9 +6,21 @@ eventually forget.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import subprocess
+from pathlib import Path
+
 import pytest
 
-from harness.entries.commits import TYPES, check, commits_in_range, default_range
+from harness.entries.commits import (
+    TYPES,
+    check,
+    commits_in_range,
+    default_range,
+    repo_root,
+)
+from harness.guards.session import repo_root as guard_root
 
 
 class TestValidMessages:
@@ -129,3 +141,56 @@ class TestRangeHandling:
         sha, subject, _body = commits[0]
         assert len(sha) >= 7
         assert subject
+
+
+class TestWorkingDirectoryIndependence:
+    """Git commands must operate on the *invoking* repository.
+
+    Both this module and the guards once resolved their root from
+    `Path(__file__).parent.parent` — the package's own install directory. Git
+    then ran there and failed with "not a git repository", or worse, operated on
+    the wrong repository. It reached CI before being noticed, because the
+    harness's own tests always run from the harness's own directory.
+    """
+
+    @contextlib.contextmanager
+    def _in(self, directory: Path):
+        original = Path.cwd()
+        try:
+            os.chdir(directory)
+            yield
+        finally:
+            os.chdir(original)
+
+    def test_repo_root_is_the_invoking_directory(self, tmp_path: Path) -> None:
+        with self._in(tmp_path):
+            assert repo_root() == tmp_path.resolve()
+
+    def test_repo_root_is_not_the_package_directory(self, tmp_path: Path) -> None:
+        """The package's own location must never be used as the repo.
+
+        When the suite runs from the package directory the two paths coincide, so
+        the assertion is made from elsewhere — which is the situation that
+        exposed the bug.
+        """
+        package_dir = Path(__file__).resolve().parent.parent
+        with self._in(tmp_path):
+            assert repo_root() != package_dir
+            assert repo_root() == tmp_path.resolve()
+
+    def test_guards_repo_root_is_the_invoking_directory(self, tmp_path: Path) -> None:
+        with self._in(tmp_path):
+            assert guard_root() == tmp_path.resolve()
+
+    def test_checking_a_range_uses_the_caller_repo(self, tmp_path: Path) -> None:
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=False)
+        for key, value in (("user.email", "t@t"), ("user.name", "T")):
+            subprocess.run(["git", "config", key, value], cwd=tmp_path, check=False)
+        (tmp_path / "f.txt").write_text("x", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=False)
+        subprocess.run(["git", "commit", "-qm", "feat: initial"], cwd=tmp_path, check=False)
+
+        with self._in(tmp_path):
+            commits = commits_in_range("HEAD")
+            assert commits, "HEAD should resolve in the caller's repository"
+            assert commits[0][1] == "feat: initial"
