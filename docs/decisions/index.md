@@ -8,3 +8,5 @@ repository makes about its own delivery stay in that repository.
 * [ADR-2026-003](ADR-2026-003-local-ci-runner.md) - a local CI runner rehearses the pipeline before push.
 * [ADR-2026-004](ADR-2026-004-session-guard-activation.md) - guards activate at the start of every session.
 * [ADR-2026-005](ADR-2026-005-harness-owns-loop.md) - the harness owns the loop; the LLM only proposes.
+* [ADR-2026-006](ADR-2026-006-derived-index.md) - the document index is derived from git and must rebuild identically.
+* [ADR-2026-007](ADR-2026-007-ci-runner-invoking-root.md) - the local CI runner resolves the invoking repository, not the package directory.

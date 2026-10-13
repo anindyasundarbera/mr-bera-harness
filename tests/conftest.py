@@ -8,8 +8,11 @@ and a bundle — rather than depending on any one repository's layout.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -84,6 +87,114 @@ def tmp_bundle(tmp_path: Path) -> Path:
     root = tmp_path / "bundle"
     root.mkdir()
     return root
+
+
+def git_commit_all(root: Path, message: str = "test: fixture") -> str:
+    """Commit everything in `root` and return the new commit's SHA.
+
+    Extraction must be a function of *committed* bytes, so every git-backed test
+    fixture has to be a real repository with real commits.
+    """
+
+    def run(*args: str) -> str:
+        proc = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "HOME": os.environ.get("HOME", ""),
+                "GIT_AUTHOR_NAME": "Harness Test",
+                "GIT_AUTHOR_EMAIL": "test@example.invalid",
+                "GIT_COMMITTER_NAME": "Harness Test",
+                "GIT_COMMITTER_EMAIL": "test@example.invalid",
+            },
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"git {' '.join(args)} failed: {proc.stderr}")
+        return proc.stdout.strip()
+
+    run("init", "-q", "-b", "main")
+    run("add", "-A")
+    run("commit", "-q", "-m", message)
+    return run("rev-parse", "HEAD")
+
+
+@pytest.fixture
+def git_project(tmp_path: Path) -> Path:
+    """A committed consumer project with documents, a bundle and a registry table.
+
+    It is deliberately built from a different layout than the harness's own, so a
+    test cannot pass by accidentally reading the harness repository.
+    """
+    root = tmp_path / "consumer"
+    for sub in ("docs", "knowledge/modules", "knowledge/changelog", "tests", "tools"):
+        (root / sub).mkdir(parents=True, exist_ok=True)
+    (root / "harness.toml").write_text(HARNESS_TOML, encoding="utf-8")
+
+    write_concept(
+        root,
+        "knowledge/modules/M06-engine.md",
+        """
+type: Module
+module: MRB-M06
+covers: [MRB-M06]
+read_budget: must-read
+depends_on: [M06-orchestration]
+""",
+        "## Purpose\n\nSee [orchestration](M06-orchestration.md).\n",
+    )
+    write_concept(
+        root,
+        "knowledge/modules/M06-orchestration.md",
+        """
+type: Concept
+module: MRB-M06
+covers: [MRB-M06-S07]
+read_budget: reference-only
+""",
+        "## Contracts\n\nBody.\n",
+    )
+    (root / "docs" / "GAP_REGISTER.md").write_text(
+        "# Gaps\n\n"
+        "| Gap ID | State | Note |\n"
+        "|---|---|---|\n"
+        "| GAP-CTL-001 | Specified | first |\n"
+        "| GAP-FRM-003 | BlockedOwner | second |\n",
+        encoding="utf-8",
+    )
+    git_commit_all(root)
+    return root
+
+
+@pytest.fixture
+def pg_conn() -> Iterator[Any]:
+    """A live PostgreSQL connection with a fresh, empty index. Skips without one.
+
+    The index layer is derived and optional, so its tests must not be the reason
+    CI fails on a machine with no database. They *do* run for real wherever a DSN
+    is supplied, which is where the rebuild invariant is actually proven.
+    """
+    dsn = os.environ.get("MRB_TEST_DSN") or os.environ.get("MRB_HARNESS_DSN")
+    if not dsn:
+        pytest.skip("no PostgreSQL DSN; set MRB_TEST_DSN to exercise the index layer")
+    from harness.index.store import (  # noqa: PLC0415 - optional extra, imported on demand
+        IndexUnavailableError,
+        connect,
+        reset,
+    )
+
+    try:
+        conn = connect(dsn)
+    except IndexUnavailableError as exc:
+        pytest.skip(f"PostgreSQL unavailable: {exc}")
+    reset(conn)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 @pytest.fixture(autouse=True)

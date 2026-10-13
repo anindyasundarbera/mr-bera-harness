@@ -61,6 +61,7 @@ types = ["feat", "fix", "docs", "chore", "ci", "refactor", "test", "build", "per
 harness describe              # show the resolved configuration
 harness context <WORK-ID>     # the documents that bind a work item
 harness conform               # OKF v0.2 conformance of the knowledge bundle
+harness index verify          # drop the index, rebuild from git, require identity
 harness doctor                # end-to-end health summary
 ```
 
@@ -112,8 +113,22 @@ if result.must_stop:
 ## Status
 
 `v0.1.0`. The deterministic layers — OKF reading, routing, entry validation,
-local CI rehearsal, session guards — are implemented and tested. The extraction
-and index layer (build-order step 1) is not yet written.
+local CI rehearsal, session guards — are implemented and tested.
+
+Build-order step 1, the extraction and index layer, is implemented: committed git
+bytes are parsed into a normalized model, loaded into a derived PostgreSQL index,
+and proven rebuild-identical by dropping the database and rebuilding from git
+(`harness index verify`). Steps 2–6 remain.
+
+The PostgreSQL index is optional. Install the extra only if you want it:
+
+```bash
+pip install -e ".[postgres]"
+export MRB_HARNESS_DSN="postgresql://user:pass@localhost:5432/db"
+harness index build     # git -> model -> Postgres
+harness index verify    # drop, rebuild from git, require an identical index
+harness index status    # what the index currently holds
+```
 
 ## Licence
 

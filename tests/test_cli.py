@@ -8,6 +8,7 @@ nothing — which is how the guards were once dropped from the CLI entirely.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,7 @@ class TestSubcommandCoverage:
         "commits",
         "entries",
         "ci",
+        "index",
         "doctor",
     }
 
@@ -134,9 +136,50 @@ class TestEntries:
 
 
 class TestCi:
-    def test_ci_runs_the_pipeline(self) -> None:
-        """Exercises the local rehearsal; a failure means a real stage failed."""
-        assert main(["ci"]) in {0, 1}
+    def test_ci_runs_the_pipeline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Exercises the rehearsal runner without recursively running this suite.
+
+        `harness ci`'s own `test` stage invokes pytest. Now that the runner
+        correctly executes in the invoking repository, running the full default
+        pipeline from inside pytest would recurse forever. A trivial pipeline
+        proves the CLI drives stages and reports their result, which is what this
+        test is for; `test_ci.py` covers the real stage definitions.
+        """
+        from harness.ci import rehearse  # noqa: PLC0415 - imported only for this test
+
+        trivial = rehearse.Pipeline(
+            stages=[
+                rehearse.Stage(
+                    "lint",
+                    "trivial",
+                    [rehearse.Step("true", [sys.executable, "-c", "pass"])],
+                )
+            ]
+        )
+        monkeypatch.setattr(rehearse, "default_pipeline", lambda: trivial)
+        assert main(["ci"]) == 0
+
+    def test_ci_reports_a_failing_stage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from harness.ci import rehearse  # noqa: PLC0415 - imported only for this test
+
+        failing = rehearse.Pipeline(
+            stages=[
+                rehearse.Stage(
+                    "lint",
+                    "always fails",
+                    [rehearse.Step("false", [sys.executable, "-c", "raise SystemExit(1)"])],
+                )
+            ]
+        )
+        monkeypatch.setattr(rehearse, "default_pipeline", lambda: failing)
+        assert main(["ci"]) == 1
+
+    def test_ci_runs_stages_in_the_invoking_repository(self, project: Path) -> None:
+        """A stage's working directory is the project, never the package install."""
+        from harness.ci import rehearse  # noqa: PLC0415 - imported only for this test
+
+        assert rehearse.repo_root(project) == project.resolve()
+        assert rehearse.repo_root() != Path(rehearse.__file__).resolve().parent
 
 
 class TestDoctor:

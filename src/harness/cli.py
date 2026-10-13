@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -272,15 +273,16 @@ def cmd_entries(args: argparse.Namespace) -> int:
 def cmd_ci(args: argparse.Namespace) -> int:
     """Rehearse the project's pipeline, and check parity against its CI."""
     from harness.ci.rehearse import (  # noqa: PLC0415 - deferred so --help stays fast
+        check_parity,
         default_pipeline,
         run_stage,
-        workflow_jobs,
     )
 
     pipeline = default_pipeline()
+    root = _config(args).root
     failures: list[str] = []
     for stage in pipeline.stages:
-        passed, messages = run_stage(stage)
+        passed, messages = run_stage(stage, root)
         print(f"[{stage.name}] {stage.description}")
         for message in messages:
             print(message)
@@ -290,17 +292,93 @@ def cmd_ci(args: argparse.Namespace) -> int:
 
     workflow = args.workflow
     if workflow:
-        result = pipeline.parity(workflow_jobs(Path(workflow)))
+        ok, messages = check_parity(Path(workflow), root)
         print(f"[parity] local stages vs {workflow}")
-        print(f"  missing locally: {result.missing or 'none'}")
-        print(f"  extra locally  : {result.extra or 'none'}")
+        for message in messages:
+            print(f"  {message}")
         print()
+        if not ok:
+            failures.append("parity")
 
     if failures:
         print(f"RESULT: FAILED — {', '.join(failures)}")
         return 1
     print("RESULT: PASSED")
     return 0
+
+
+def cmd_index(args: argparse.Namespace) -> int:
+    """Build, verify or inspect the derived document index.
+
+    The index is *derived*: it is a function of committed git bytes and nothing
+    else. `verify` proves that by dropping the tables, rebuilding from git and
+    comparing the two models' digests.
+    """
+    from harness.extract.model import model_digest  # noqa: PLC0415 - deferred so --help stays fast
+    from harness.extract.source import (  # noqa: PLC0415 - deferred so --help stays fast
+        IndexSourceError,
+        model_from_git,
+    )
+    from harness.index.store import (  # noqa: PLC0415 - deferred so --help stays fast
+        IndexUnavailableError,
+        connect,
+        read_model,
+        reset,
+        write_model,
+    )
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    root = config.root
+    dsn = args.dsn or os.environ.get("MRB_HARNESS_DSN")
+    try:
+        conn = connect(dsn)
+    except IndexUnavailableError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        print("The index is a derived store; set MRB_HARNESS_DSN or pass --dsn.")
+        return 3
+
+    with conn:
+        if args.index_command == "status":
+            current = read_model(conn)
+            print(f"documents : {len(current.documents)}")
+            print(f"registry  : {len(current.registry_tables)} table(s)")
+            print(f"commit    : {current.commit_sha or '(not built)'}")
+            print(f"digest    : {model_digest(current)}")
+            return 0
+
+        try:
+            model = model_from_git(root, config, rev=args.rev)
+        except IndexSourceError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+
+        if args.index_command == "build":
+            reset(conn)
+            write_model(conn, model)
+            print(
+                f"indexed {len(model.documents)} document(s) from {model.commit_sha[:12]}"
+                f" ({len(model.registry_tables)} registry table(s))"
+            )
+            print(f"digest: {model_digest(model)}")
+            return 0
+
+        # verify: build from git, read back, drop, rebuild from git, compare.
+        reset(conn)
+        write_model(conn, model)
+        first = model_digest(read_model(conn))
+        reset(conn)
+        write_model(conn, model)
+        second = model_digest(read_model(conn))
+        if first != second:
+            print(f"FAIL rebuild differs: {first} != {second}")
+            return 1
+        print(f"OK   index rebuilds identically from git: {first}")
+        return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -344,6 +422,18 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("ci", help="rehearse the project's pipeline locally")
     p.add_argument("--workflow", help="path to a CI workflow, for the parity check")
     p.set_defaults(func=cmd_ci)
+
+    p = sub.add_parser("index", help="build, verify or inspect the derived document index")
+    index_sub = p.add_subparsers(dest="index_command", required=True)
+    build = index_sub.add_parser("build", help="load the document model into PostgreSQL")
+    build.add_argument("--rev", default="HEAD", help="git revision to index (default: HEAD)")
+    build.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+    verify = index_sub.add_parser("verify", help="prove the index rebuilds identically from git")
+    verify.add_argument("--rev", default="HEAD", help="git revision to verify (default: HEAD)")
+    verify.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+    status = index_sub.add_parser("status", help="show the current index's identity")
+    status.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+    p.set_defaults(func=cmd_index)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)

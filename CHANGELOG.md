@@ -4,6 +4,112 @@
 > Regenerate with `harness entries generate`.
 > The authoritative entries live in `knowledge/changelog/`.
 
+## 2026-10-13
+
+### Fixed: The local CI rehearsal runs in the invoking repository again
+
+*harness ci resolved its root from the installed package directory, so 8 of 12 stages failed while its parity check reported success having read nothing; stages now run in the invoking repository and parity reads the workflow.*
+
+- **ID:** `CHG-2026-006`  
+- **Covers:** `MRB`
+
+`ci/rehearse.py` was the last module still resolving its own location
+(`Path(__file__).resolve().parent.parent`), which points at the installed package
+(`.../src/harness`) rather than the repository the command was run in. Its
+siblings had already been corrected; the runner was missed.
+
+## Observed, before the fix
+
+From the harness repository root:
+
+```
+  FAIL  wheel build        Directory '.' is not installable ... no pyproject.toml
+  FAIL  pytest             file or directory not found: tests/
+  FAIL  okf conformance    no harness.toml in .../src/harness
+[parity] local stages vs .github/workflows/ci.yml
+  missing locally: none      <-- reported success while reading nothing
+RESULT: FAILED — package, typecheck, test, selfcheck
+```
+
+Eight of twelve steps failed. The parity check was the worse fault: it compared
+the pipeline against a job list it had not parsed, so a green local run would
+have meant nothing.
+
+## Fixed
+
+- `repo_root()` resolves `Path.cwd()`, matching `guards/session.py`;
+  `run_stage` executes there.
+- `check_parity` reads the workflow file, and a parity failure now fails the run.
+- The `selfcheck` stages name existing commands; `mypy src` matches `ci.yml`; the
+  dead `tools/*.py` references are gone.
+- `Step.ok_exit_codes` records that a deliberate non-zero exit is a passing
+  check, so the rehearsal can assert the `harness context` exit-code contract.
+
+Result: `RESULT: PASSED`, `parity: every CI job has a local stage`.
+
+## Found while fixing it
+
+With the runner correctly executing in the invoking repository, a test that
+called `main(["ci"])` from inside pytest recursed forever — the `test` stage runs
+pytest. The test now builds a trivial pipeline from the module's own stages and
+asserts the runner drives it, without re-entering the suite.
+
+**Tests:** regression tests pin the root and the parity read.
+
+### Added: Extraction and a derived index that rebuilds identically from git
+
+*Implemented build-order step 1 — committed git bytes are extracted with the tested OKF reader into a normalized model with a stable digest, loaded into PostgreSQL as a derived index, and proven rebuild-identical by dropping the database and rebuilding from git.*
+
+- **ID:** `CHG-2026-005`  
+- **Covers:** `MRB`
+
+Implements build-order step 1 of `HARNESS_ARCHITECTURE.md` §9: *extraction + index
+— parse frontmatter/tables into Postgres; prove rebuild-from-git is identical.*
+
+## What was built
+
+**Extraction** (`harness/extract/`) — a pure function from committed bytes to a
+normalized model:
+
+- `model.py` — frozen `Document` / `RegistryTable` / `IndexModel` and
+  `model_digest`, SHA-256 over a canonical JSON rendering. No timestamps, no row
+  ids, no insertion order, so the same revision always serializes the same.
+- `documents.py` — body headings, resolved internal links, and markdown tables.
+  Parsing is **reused** from `harness.okf.reader`, not reimplemented.
+- `source.py` — `git archive <rev>` materialized into a temporary tree, then read.
+  Extraction therefore sees committed content only.
+
+**Index** (`harness/index/`) — a derived PostgreSQL store. `reset` drops and
+recreates the tables; `write_model` writes a model; `read_model` reconstructs one
+**from the rows alone**, never touching the filesystem.
+
+**CLI** — `harness index build | verify | status`, returning 3 when PostgreSQL is
+unreachable, in keeping with the existing exit-code contract.
+
+## The invariant
+
+The test drops the tables, rebuilds from git, and requires the two models'
+digests to be identical *and* compares them table-by-table. It also asserts the
+model is non-empty and that a committed change **breaks** the equality — without
+those, it could pass while indexing nothing. A hand-run negative control
+corroborated it: corrupting one stored field changed the digest
+(`73c167aa…` → `f1b349f5…`).
+
+Verified against a real PostgreSQL, not only against the store in isolation.
+
+## Notes
+
+- `psycopg` stays an optional extra, the index tests skip cleanly without a DSN,
+  and no PostgreSQL version is asserted — no authoritative document fixes one.
+- Registry files are read from `[registries.*]` in `harness.toml`; the harness
+  never guesses which documents are registries.
+- Paths resolve from the invoking directory. Resolving a caller's context from
+  the library's own location is a defect this repository has hit repeatedly.
+
+**Tests:** 329 passing (15 skipped without a DSN); 344 passing against a live
+PostgreSQL, coverage 87.9% against an 80% floor. Lint, format, `mypy --strict`,
+`harness doctor` and `harness ci` all clean.
+
 ## 2026-10-10
 
 ### Fixed: Git commands run in the invoking repository, not the package's directory
