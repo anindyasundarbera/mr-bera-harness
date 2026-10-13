@@ -8,3 +8,4 @@ Why the harness is shaped the way it is.
 * [PROMPT_COMPILER.md](PROMPT_COMPILER.md) - build-order step 3: bounded prompts with a content-bound fingerprint.
 * [OKF_MODULE_SYSTEM.md](OKF_MODULE_SYSTEM.md) - the knowledge bundle format and the exit-code contract.
 * [RESEARCH_DOSSIER.md](RESEARCH_DOSSIER.md) - prior art, and the locally reproduced experiments.
+* [REMAINING_WORK.md](REMAINING_WORK.md) - build-order state, what is next, and the open decisions.
