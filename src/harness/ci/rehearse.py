@@ -101,7 +101,19 @@ class Stage:
 
 
 def stages() -> list[Stage]:
-    """The stages, mirroring .github/workflows/ci.yml job-for-job."""
+    """The stages, mirroring .github/workflows/ci.yml job-for-job.
+
+    Deliberately absent: the **session** guards (`harness guards`). They answer
+    "may a coding session begin here?", refusing a protected branch, a tracked
+    secret or unresolved conflict markers (ADR-2026-004). That is a precondition
+    on a *session*, not a property of the *tree*.
+
+    Wiring them into a build stage made `harness ci` fail on `main`, and would
+    fail CI on every push to `main`, because `main` is protected by definition.
+    A build check that can never pass on the default branch is not a build check.
+    Session activation stays where ADR-2026-004 put it: a step an agent runs
+    before doing work.
+    """
     return [
         Stage(
             name="package",
@@ -157,7 +169,6 @@ def stages() -> list[Stage]:
                 Step("okf conformance", [PY, "-m", "harness.cli", "conform"]),
                 Step("routing invariants", [PY, "-m", "harness.cli", "doctor"]),
                 Step("entry schema", [PY, "-m", "harness.cli", "doctor"]),
-                Step("branch not stacked", [PY, "-m", "harness.cli", "guards", "--json"]),
                 Step(
                     "generated indexes current",
                     [PY, "-m", "harness.cli", "entries", "generate", "--check"],
