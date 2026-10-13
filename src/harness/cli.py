@@ -915,6 +915,79 @@ def _emit_ledger(args: argparse.Namespace, payload: list[Any], records: list[Any
             )
 
 
+def cmd_intent(args: argparse.Namespace) -> int:
+    """Resolve a human instruction to a work item, and say so when it cannot.
+
+    **Nothing here executes.** Resolution is a lookup with a refusal path; a wrong
+    guess would bind a prompt to the wrong work item, which is why ambiguity is an
+    exit code rather than a coin toss.
+
+    Exit codes: 0 resolved, 3 ambiguous, 4 unresolved, 2 usage error.
+    """
+    from harness.intent.resolve import (  # noqa: PLC0415 - deferred so --help stays fast
+        EXIT_OK,
+        Resolution,
+        render,
+        resolve,
+    )
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    instruction = args.instruction
+
+    # An explicit identifier bypasses resolution entirely — the architecture says a
+    # human who writes the work ID loses nothing by skipping this step.
+    if args.work_id:
+        pattern = config.identity.id_pattern()
+        if not pattern.match(args.work_id.strip()):
+            print(
+                f"ERROR: {args.work_id!r} is not a valid {config.identity.name} work "
+                f"identifier (expected {pattern.pattern})",
+                file=sys.stderr,
+            )
+            return 2
+        outcome = Resolution(
+            instruction=instruction,
+            status="resolved",
+            chosen=args.work_id.strip(),
+            reason="the work item was given explicitly, so nothing was inferred",
+        )
+    else:
+        outcome = resolve(config, instruction, threshold=args.threshold)
+
+    if args.json:
+        print(json.dumps(outcome.as_dict(), indent=2, default=str))
+    else:
+        print(render(outcome, config))
+
+    code = outcome.exit_code()
+
+    # Optionally continue into step 3, which is a separate, deterministic step.
+    if args.budget is not None and code == EXIT_OK and outcome.chosen:
+        from harness.compile.prompt import (  # noqa: PLC0415 - deferred
+            CompileError,
+            compile_prompt,
+        )
+
+        try:
+            compiled = compile_prompt(config, outcome.chosen, budget=args.budget)
+        except CompileError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return exc.exit_code
+        if args.compile:
+            print(compiled.text, end="")
+        print(
+            f"fingerprint {compiled.fingerprint}  "
+            f"({compiled.used}/{compiled.budget} {compiled.unit}s)",
+            file=sys.stderr,
+        )
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -1128,6 +1201,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p.set_defaults(func=cmd_ledger)
+
+    p = sub.add_parser("intent", help="resolve a human instruction to a work item (never guesses)")
+    intent_sub = p.add_subparsers(dest="intent_command", required=True)
+
+    intent_common = argparse.ArgumentParser(add_help=False)
+    intent_common.add_argument("--json", action="store_true", help="emit JSON")
+    intent_common.add_argument(
+        "--threshold",
+        type=float,
+        default=0.2,
+        help="minimum lexical score to consider a candidate (default: 0.2)",
+    )
+
+    intent_resolve = intent_sub.add_parser(
+        "resolve", parents=[intent_common], help="resolve an instruction to one work item"
+    )
+    intent_resolve.add_argument("instruction", help="what the person asked for, verbatim")
+    intent_resolve.add_argument(
+        "--work-id",
+        help="an explicit work item: bypasses resolution entirely, which is always allowed",
+    )
+    intent_resolve.add_argument(
+        "--budget",
+        type=int,
+        help="also compile a prompt for the resolved work item, at this budget",
+    )
+    intent_resolve.add_argument(
+        "--compile",
+        action="store_true",
+        help="with --budget, also print the compiled prompt",
+    )
+
+    p.set_defaults(func=cmd_intent)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)

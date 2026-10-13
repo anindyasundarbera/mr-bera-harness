@@ -197,6 +197,16 @@ must_not_do:
         "| GAP-FRM-003 | BlockedOwner | second |\n",
         encoding="utf-8",
     )
+    # The decomposition declares what work exists. It is what instruction→work-item
+    # resolution reads, so a fixture without one cannot exercise that step.
+    (root / "docs" / "PROJECT_DECOMPOSITION.md").write_text(
+        "# Decomposition\n\n"
+        "- MRB-M06 — Engine module\n"
+        "  - MRB-M06-S07 — Orchestration contracts\n"
+        "    - MRB-M06-S07-C03 — Execution semantics\n"
+        "  - MRB-M06-S03 — Provider registry and model set\n",
+        encoding="utf-8",
+    )
     git_commit_all(root)
     return root
 

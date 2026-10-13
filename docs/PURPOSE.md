@@ -84,8 +84,10 @@ is meant to fix.
   code is recorded, but the edge between them is not. That edge is what would let a
   reader move from a line of code to why it is that way — and it is the next thing
   that would make "the codebase is alive" more than a description of its documents.
-- **Instruction → prompt (build-order step 6) is not built**, and the architecture
-  says nothing may depend on it: a human typing a work item ID loses nothing.
+- **Instruction → prompt (build-order step 6) resolves and refuses, but is not a
+  classifier.** It finds identifiers an instruction names and asks when the answer is
+  ambiguous. It does not infer intent from prose, and the architecture is explicit
+  that nothing may depend on it: a human typing a work item ID loses nothing.
 - **`harness ci` is not project-agnostic** in a consuming repository: it runs the
   harness's own pipeline rather than the consumer's (`ADR-2026-016`, `Proposed`). Recorded as a proposed defect.
 

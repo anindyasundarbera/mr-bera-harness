@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-018` | 2026-10-13 | Instruction resolution refuses rather than guesses, and calls no model | Accepted | — |
 | `ADR-2026-017` | 2026-10-13 | Propose linking source code to the decisions that produced it | Proposed | — |
 | `ADR-2026-016` | 2026-10-13 | The local CI rehearsal refuses to run a project it has no pipeline for | Proposed | — |
 | `ADR-2026-015` | 2026-10-13 | Workflow changes route through SSH while agent credentials lack the workflow scope | Accepted | — |

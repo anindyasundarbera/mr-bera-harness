@@ -42,6 +42,7 @@ class TestSubcommandCoverage:
         "dashboard",
         "propose",
         "ledger",
+        "intent",
         "doctor",
     }
 
