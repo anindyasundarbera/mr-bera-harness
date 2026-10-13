@@ -6,6 +6,52 @@
 
 ## 2026-10-13
 
+### Fixed: The README no longer claims a gap the repository has closed
+
+*PR*
+
+- **ID:** `CHG-2026-020`  
+- **Covers:** `MRB`
+
+The same class of defect `CHG-2026-016` fixed in the generated header — a document
+asserting something the repository no longer makes true — reappeared one file over,
+because the change that closed the gap updated `docs/PURPOSE.md` and every design
+note it owns, but not the README that links to it.
+
+## Three contradictions, all in one file
+
+1. **A closed gap still described as open, twice.** `README.md:19` said
+   *"including the one gap it does not yet close: there is no checked link from a
+   line of code to the decision that produced it"* and `README.md:154` repeated it.
+   `PURPOSE.md` §4 now says the opposite — *"Recently closed — the gap this document
+   previously named as the principal one"* — and `harness provenance check` exits 0.
+   The README therefore **contradicted the document it links to**, which is the
+   drift this repository exists to catch.
+2. **A broken internal path.** `README.md:134` pointed at
+   `docs/HARNESS_ARCHITECTURE.md`; the file is `docs/design/HARNESS_ARCHITECTURE.md`.
+   Line 143 of the same file already had it right.
+3. **An undocumented shipped command.** The Status section said *"All six build-order
+   components are implemented"* while `harness provenance` — built beyond the build
+   order — appeared nowhere in the README, unlike every other command group.
+
+## The fix, and the check that stops the recurrence
+
+The two false claims are replaced with wording that does not overclaim, the path
+becomes `docs/design/`, and the provenance commands join the command list.
+
+The larger point is that nothing caught this: no test read the README, and
+`harness doctor` does not. `tests/test_readme.py` now checks that every relative link
+in the README resolves to a tracked file, so a moved or misspelled path fails the
+suite rather than a reader.
+
+Stated plainly: the test checks that a link **resolves**, not that its *target is
+still true*. Claim 1 above — a document asserting a stale fact — is not machine-checkable
+from a link, and this test does not pretend otherwise. What it removes is the class
+where the README points at a file that is not there.
+
+**Tests:** 606 without a database (6 new); coverage unchanged at 82.2%. Lint, format,
+`mypy --strict`, `harness doctor` and `harness ci` all clean.
+
 ### Added: Code provenance — every file can declare the decision that produced it
 
 *Closed the gap docs/PURPOSE.md named, by letting a source file declare the decisions binding it with the decision's anchor hash, so a revised decision flags every implementing file as stale; the links are checked in CI and written to the derived index for joins.*

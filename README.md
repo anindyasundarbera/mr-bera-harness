@@ -16,8 +16,8 @@ validation surface is testable rather than a model's reasoning. That is what
 makes "every action validated" achievable rather than aspirational.
 
 **Why this exists, and how much of it is true today, is stated plainly in
-[docs/PURPOSE.md](docs/PURPOSE.md)** — including the one gap it does not yet close:
-there is no checked link from a line of code to the decision that produced it.
+[docs/PURPOSE.md](docs/PURPOSE.md)** — including what has been closed and what it
+deliberately does not claim.
 
 ## What it does
 
@@ -131,7 +131,7 @@ if result.must_stop:
 
 | Principle | Where |
 |---|---|
-| The model proposes; the harness disposes | `docs/HARNESS_ARCHITECTURE.md` |
+| The model proposes; the harness disposes | `docs/design/HARNESS_ARCHITECTURE.md` |
 | Constrained decoding is native, not prompt-and-validate | validated experimentally, see §10.1 |
 | Git is the source of truth; anything derived is rebuildable | §5 |
 | Prevention over detection: remove a capability rather than check it | §7 |
@@ -148,10 +148,12 @@ enforce the rules the architecture enumerates and execute nothing; and a session
 ledger in `git notes` that survives a repository copy. **Step 6 — instruction→prompt
 — resolves a human instruction to a work item, and asks instead of guessing** when the
 answer is not unique. A **usage dashboard** ships alongside. All six build-order
-components are implemented.
+components are implemented. Beyond the build order, **a file can declare the decision
+that produced it** — checked against the decision's anchor hash, so a revised decision
+flags every implementing file as stale (`harness provenance`).
 
 **What this repository is for, and how much of it is true today, is stated plainly
-in [docs/PURPOSE.md](docs/PURPOSE.md)** — including the gap it does not yet close.
+in [docs/PURPOSE.md](docs/PURPOSE.md)** — including the limitations it still carries.
 
 The PostgreSQL index is optional. Install the extra only if you want it:
 
@@ -179,6 +181,10 @@ harness ledger append ...   # record a session entry under git notes
 harness ledger verify       # integrity, and the ledger digest
 
 harness intent resolve "work on MRB-M06-S07"   # instruction -> work item, or a question
+
+harness provenance marker ADR-2026-009   # the declaration line, ready to paste
+harness provenance check                 # verify every declaration; exit 1 on stale
+harness provenance map                   # which files declare each decision
 ```
 
 `harness query` exits **3** when the index is unreachable, so "no answers" is
