@@ -6,60 +6,85 @@
 
 ## 2026-10-13
 
-### Added: Recorded why session resume needs capture first
+### Added: The handoff's facts are generated, so they stop going stale
 
-*Recorded that "generate the last session's handoff and continue from it" is desirable but cannot reconstruct an unrecorded session, because the ledger holds only caller-reported records, nothing writes them, the local dashboard history is non-durable by design, and the harness cannot read a transcript; capture must land first, and the agent supplies the narrative while the harness stores and verifies it.*
+*Split docs/design/REMAINING_WORK.md into hand-written narrative and a marker-delimited region refreshed by tools/refresh_handoff.py from the harness's own derivations, with a --check mode that exits 1 on staleness; the region holds only facts that are functions of the committed content.*
 
-- **ID:** `CHG-2026-022`  
+- **ID:** `CHG-2026-021`  
 - **Covers:** `MRB`
 
-The owner asked for two things on 2026-10-13: that **the harness** offer, at session
-start, to **generate the last session's handoff and continue from it**; and that it be
-able to **reconstruct what was done**. The intent is exactly what `PURPOSE.md` §6
-already asks for, so the goal is not in dispute. Four obstacles are, and each was
-measured this session rather than assumed.
+The handoff is the first document a new session is told to trust, and it has already
+been wrong once — the v2.0 refresh found it describing steps 1–3 as the state and steps
+4–6 as "not started" when all six were merged. That was fixed by rewriting it. The
+*facts* that were wrong are the kind a machine knows exactly, and they had been
+refreshed by hand, so they were due to decay again the moment the next change landed.
 
-## The four obstacles
+## What changed
 
-| # | Finding | Measured how |
-|---|---|---|
-| 1 | There is nothing to reconstruct from | `harness ledger list` returns no records; `git for-each-ref refs/notes` lists nothing |
-| 2 | The one history store is non-durable by design | `dashboard history` reads `.harness/`, excluded by `.gitignore:36` and documented as "local, not source" |
-| 3 | "What was done" is mostly not captured | the ledger holds prompt/proposal/verdict/effect per work item, not "PR #17 was opened" |
-| 4 | The harness cannot know a session opened | no session concept; no `input()`/prompt anywhere in `src/`; the only stdin read is `sys.stdin.read()` for `-` |
+`docs/design/REMAINING_WORK.md` now carries a generated region delimited by
+`<!-- harness:handoff-facts:start/end -->`. `tools/refresh_handoff.py` fills it with
+values **derived** from the repository through the harness's own library:
 
-The decisive one is a fifth: **a session transcript is not a repository artifact.** For
-the harness to *reconstruct* a session it would have to read the conversation, which
-would put the harness inside the agent's runtime — inverting `ADR-2026-005` (*the LLM
-proposes; the harness disposes*) — and would treat a model's account of what it did as an
-observation rather than a claim. That is `ADR-2026-017`'s rejected failure one level up.
+| Fact | Derived from |
+|---|---|
+| OKF concepts | the `Bundle` reader |
+| entries, problems | the entries `validate_all` |
+| test modules | the configured tests directory |
+| provenance declarations | the provenance `check` |
+| commit vocabulary | the resolved `Config` |
 
-## What was decided, and what was refused
+Nothing is re-implemented. A second implementation would be a second definition of "the
+entry count", and the two would drift — the defect, reintroduced in the fix.
 
-**`ADR-2026-021` (`Proposed`)** fixes the design and the order, on the owner's direction
-that capture lands first:
+## The design decision that came from building it
 
-- **The split:** the agent supplies the narrative; the harness stores and verifies it —
-  the same division as code provenance, where *a person writes the declaration and the
-  tool only verifies it*.
-- **Capture** is the part with something to build: the ledger must actually be written at
-  the end of a session, a CI stage can require a record on a branch (the `Loud` class of
-  §7, bypassable with `--no-verify`, and recorded as such), and the handoff is the durable
-  narrative now that its facts are generated (`ADR-2026-020`).
-- **Resume** must be three-valued — `reconstructed` / `partial` / `nothing-recorded` — and
-  must never present a plausible summary of a session that was recorded nowhere.
-- **"The harness asks the user at session start" is refused as a harness capability:** it
-  is a property of the host that opens the session. The harness exposes a command; a host
-  hook may call it, and that hook is not in this repository.
+The first implementation also rendered **the revision** and **the test pass/skip
+counts**. Both were removed, and the reason is worth recording because it was found by
+observation rather than by reasoning ahead:
 
-Also refused: building resume before capture (it would read an empty ledger and appear to
-work while answering nothing); summarising a transcript; and inferring "what was done"
-from commit subjects, which is a guess wearing provenance.
+- **A committed file cannot contain its own commit's hash.** A region stating
+  `Revision: <HEAD>` is stale the instant it is committed, so `--check` could never
+  return `0` and the scheduled job would rewrite the same lines forever.
+- **The test counts describe the environment.** The same commit reports one pair without
+  a database and a different pair with one, so the check would differ between a laptop
+  and CI — the class of defect already paid for twice here (a coverage floor measured
+  differently with and without `MRB_TEST_DSN`).
 
-**Stated limit:** the record does not decide how a session boundary is detected, nor which
-ledger fields a session-level record needs. Both remain `DecisionRequired`.
+The rule, stated once: **the region holds only facts that are functions of the committed
+content.** A fact about the checkout or the machine is not a fact about the repository.
+The rule is pinned by a test that asserts the `Facts` dataclass carries none of those
+fields, so re-adding one fails with the reason attached.
 
-**Tests:** no code changed. `harness doctor` clean, `harness entries validate` 0 problems.
+## What deliberately did not change
+
+**The narrative.** What was built, what is blocked, what is next is a judgement; a
+script that produced it would be inventing a handoff. Only the marked region is
+generated, and the splice is tested to leave every byte outside it untouched.
+
+## The interface
+
+```
+refresh_handoff.py            # refresh the region (exit 0)
+refresh_handoff.py --check    # exit 1 if stale, 2 if the handoff has no markers
+```
+
+The `1` is what a scheduled job acts on without mutating anything. A handoff with no
+markers exits `2` rather than doing nothing quietly — a silent no-op would report
+success while refreshing nothing.
+
+## Proven, not asserted
+
+- Tampering with a derived value (`OKF concepts 21` → `20`) made `--check` exit **1**;
+  the refresher restored it and `--check` returned **0**.
+- **The region settles on a committed tree.** `--check` returns `0` after a real commit,
+  which the first design could not have achieved by construction.
+
+**Stated limit:** the script proves the region matches the repository's derivations. It
+cannot prove the narrative is true — the v1.0 staleness was prose, and no marker catches
+prose.
+
+**Tests:** 624 without a database (18 new); coverage 82.2%. Lint, format,
+`mypy --strict`, `harness doctor`, `harness provenance check` and `harness ci` all clean.
 
 ### Fixed: The README no longer claims a gap the repository has closed
 
