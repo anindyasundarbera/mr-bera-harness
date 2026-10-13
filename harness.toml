@@ -11,7 +11,7 @@ widths = [2, 2, 2, 2, 2]
 docs = "docs"
 knowledge = "knowledge"
 changelog = "knowledge/changelog"
-decisions = "knowledge/decisions"
+decisions = "docs/decisions"
 tests = "tests"
 tools = "src"
 

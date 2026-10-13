@@ -20,7 +20,6 @@ from harness.entries.generator import (
     Entry,
     generate,
     load_entries,
-    main,
     render_changelog,
     render_decisions_index,
     validate_adr_entry,
@@ -317,7 +316,8 @@ class TestCliContract:
         assert result.ok or result.entries, "either no entries, or all entries valid"
 
     def test_generate_check_is_idempotent_here(self) -> None:
-        assert main(["generate", "--check"]) == 0
+        code, _messages = generate(check=True)
+        assert code == 0
 
     def test_no_args_is_usage_error(self) -> None:
         result = subprocess.run(

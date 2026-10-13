@@ -139,7 +139,11 @@ class Config:
         return self.source is not None
 
     def path(self, key: str) -> Path:
-        return self.root / getattr(self.paths, key)
+        """Resolve a configured path key against the project root."""
+        value = getattr(self.paths, key, None)
+        if value is None:
+            raise ConfigError(f"unknown path key `{key}`")
+        return self.root / str(value)
 
     @classmethod
     def defaults(cls, root: Path | None = None) -> Config:

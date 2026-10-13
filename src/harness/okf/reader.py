@@ -12,9 +12,7 @@ derives trust tier / staleness per SPEC sections 5.3-5.5 and 11.
 from __future__ import annotations
 
 import datetime as _dt
-import json
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -296,53 +294,3 @@ class Bundle:
                     if raw and self.resolve_path(c, str(raw)) is None:
                         problems.append(f"{cid}: {path_field} must be a path, not a URL")
         return problems
-
-
-def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        print("usage: okf.py <bundle-root> [--conform] [--json]", file=sys.stderr)
-        return 2
-    bundle = Bundle(Path(argv[1]))
-    concepts = bundle.concepts()
-    as_json = "--json" in argv
-
-    if as_json:
-        payload = {
-            "bundle": str(bundle.root),
-            "count": len(concepts),
-            "concepts": [
-                {
-                    "id": c.concept_id,
-                    "type": c.type,
-                    "title": c.title,
-                    "description": c.description,
-                    "status": c.status,
-                    "trust": c.trust_tier,
-                    "stale": c.is_stale(),
-                    "tags": c.frontmatter.get("tags") or [],
-                }
-                for c in concepts.values()
-            ],
-            "problems": bundle.check(),
-        }
-        print(json.dumps(payload, indent=2))
-        return 0
-
-    print(f"bundle: {bundle.root}")
-    print(f"concepts: {len(concepts)}")
-    for c in concepts.values():
-        stale = c.is_stale()
-        note = "" if stale is None else (" STALE" if stale else " fresh")
-        print(f"  - {c.concept_id}  [{c.type}]  trust={c.trust_tier}/{c.status}{note}")
-
-    if "--conform" in argv:
-        problems = bundle.check()
-        print(f"\nconformance problems: {len(problems)}")
-        for p in problems:
-            print(f"  ! {p}")
-        return 1 if problems else 0
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
