@@ -13,10 +13,10 @@ digest.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Any
 
+from conftest import git_commit
 from harness.config import load_config
 from harness.extract.model import model_digest
 from harness.extract.source import model_from_git
@@ -75,13 +75,7 @@ class TestRebuildInvariant:
 
         target = git_project / "knowledge" / "modules" / "M06-engine.md"
         target.write_text(target.read_text(encoding="utf-8") + "\n\n## New\n", encoding="utf-8")
-        subprocess.run(["git", "add", "-A"], cwd=git_project, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-q", "-m", "docs: change"],
-            cwd=git_project,
-            check=True,
-            capture_output=True,
-        )
+        git_commit(git_project, "docs: change")
 
         after, _ = _rebuild(pg_conn, git_project)
         assert before != after

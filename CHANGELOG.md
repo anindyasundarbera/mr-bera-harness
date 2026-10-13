@@ -99,6 +99,14 @@ Verified against a real PostgreSQL, not only against the store in isolation.
 
 ## Notes
 
+- **A defect CI caught that a local run could not.** The git-backed fixtures
+  initially ran `git commit` relying on the host's global identity. That exists on
+  a developer machine and not on a runner, so the tests passed locally and failed
+  in CI with `Author identity unknown` (exit 128) on all three Python versions.
+  The fixtures now supply an identity explicitly (a local `user.name`/`user.email`
+  plus the environment). Reproduced with `GIT_CONFIG_GLOBAL=/dev/null
+  GIT_CONFIG_SYSTEM=/dev/null HOME=<empty>`, which is now the shape this work is
+  verified against.
 - `psycopg` stays an optional extra, the index tests skip cleanly without a DSN,
   and no PostgreSQL version is asserted — no authoritative document fixes one.
 - Registry files are read from `[registries.*]` in `harness.toml`; the harness

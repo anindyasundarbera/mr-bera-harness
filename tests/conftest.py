@@ -89,37 +89,52 @@ def tmp_bundle(tmp_path: Path) -> Path:
     return root
 
 
+def git_env() -> dict[str, str]:
+    """Environment for test git commands, with an identity supplied explicitly.
+
+    CI runners have no global git identity, so a bare `git commit` fails with
+    exit 128 and depends on the host having one configured. Supplying the
+    identity here — rather than relying on the machine — is what made these
+    fixtures pass locally and fail in CI.
+    """
+    return {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "Harness Test",
+        "GIT_AUTHOR_EMAIL": "test@example.invalid",
+        "GIT_COMMITTER_NAME": "Harness Test",
+        "GIT_COMMITTER_EMAIL": "test@example.invalid",
+    }
+
+
+def git_run(root: Path, *args: str) -> str:
+    """Run a git command in `root`, failing the test loudly on error."""
+    proc = subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, text=True, check=False, env=git_env()
+    )
+    if proc.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed in {root}: {proc.stderr.strip()}")
+    return proc.stdout.strip()
+
+
+def git_commit(root: Path, message: str = "test: fixture") -> str:
+    """Stage everything and commit. Returns the new commit's SHA."""
+    git_run(root, "add", "-A")
+    git_run(root, "commit", "-q", "-m", message)
+    return git_run(root, "rev-parse", "HEAD")
+
+
 def git_commit_all(root: Path, message: str = "test: fixture") -> str:
-    """Commit everything in `root` and return the new commit's SHA.
+    """Initialise a repository with a working identity, then commit everything.
 
     Extraction must be a function of *committed* bytes, so every git-backed test
     fixture has to be a real repository with real commits.
     """
-
-    def run(*args: str) -> str:
-        proc = subprocess.run(
-            ["git", *args],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-            env={
-                "PATH": os.environ.get("PATH", ""),
-                "HOME": os.environ.get("HOME", ""),
-                "GIT_AUTHOR_NAME": "Harness Test",
-                "GIT_AUTHOR_EMAIL": "test@example.invalid",
-                "GIT_COMMITTER_NAME": "Harness Test",
-                "GIT_COMMITTER_EMAIL": "test@example.invalid",
-            },
-        )
-        if proc.returncode != 0:
-            raise AssertionError(f"git {' '.join(args)} failed: {proc.stderr}")
-        return proc.stdout.strip()
-
-    run("init", "-q", "-b", "main")
-    run("add", "-A")
-    run("commit", "-q", "-m", message)
-    return run("rev-parse", "HEAD")
+    git_run(root, "init", "-q", "-b", "main")
+    # A local identity means a later raw `git commit` in a test still works on a
+    # runner with no global one.
+    git_run(root, "config", "user.email", "test@example.invalid")
+    git_run(root, "config", "user.name", "Harness Test")
+    return git_commit(root, message)
 
 
 @pytest.fixture

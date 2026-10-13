@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from conftest import git_commit
 from harness.config import load_config
 from harness.extract.model import model_digest
 from harness.extract.source import IndexSourceError, commit_sha, materialize_commit, model_from_git
@@ -64,13 +64,7 @@ class TestCommittedBytesOnly:
         target.write_text(
             target.read_text(encoding="utf-8") + "\n\n## Committed\n", encoding="utf-8"
         )
-        subprocess.run(["git", "add", "-A"], cwd=git_project, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-q", "-m", "docs: change"],
-            cwd=git_project,
-            check=True,
-            capture_output=True,
-        )
+        git_commit(git_project, "docs: change")
 
         assert model_digest(model_from_git(git_project, config)) != before
 
@@ -107,12 +101,6 @@ class TestRegistries:
         (git_project / "docs" / "NOT_A_REGISTER.md").write_text(
             "| A | B |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8"
         )
-        subprocess.run(["git", "add", "-A"], cwd=git_project, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-q", "-m", "docs: extra"],
-            cwd=git_project,
-            check=True,
-            capture_output=True,
-        )
+        git_commit(git_project, "docs: extra")
         model = model_from_git(git_project, load_config(git_project))
         assert [t.source for t in model.registry_tables] == ["docs/GAP_REGISTER.md"]
