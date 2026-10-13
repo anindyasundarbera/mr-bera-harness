@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import HARNESS_TOML
 from harness.cli import main
 from harness.config import load_config
 from harness.dashboard.render import render_html
@@ -34,6 +35,22 @@ from harness.dashboard.store import (
 
 
 class TestReport:
+    def test_a_vacuous_routing_pass_is_unknown(self, tmp_path: Path) -> None:
+        """`pass` over zero concepts checked nothing, so it is not a pass.
+
+        The harness's own bundle is the real case: it holds only entries, which
+        `validate_routing` deliberately skips.
+        """
+        for sub in ("docs", "knowledge", "tests", "tools"):
+            (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "harness.toml").write_text(HARNESS_TOML, encoding="utf-8")
+        (tmp_path / "knowledge" / "index.md").write_text("# Bundle\n", encoding="utf-8")
+
+        run = collect(load_config(tmp_path), include_tests=False)
+        routing = next(c for c in run.checks if c.name == "routing invariants")
+        assert routing.status == "unknown"
+        assert "proves nothing" in routing.detail
+
     def test_collects_every_category(self, git_project: Path) -> None:
         run = collect(
             load_config(git_project), now=_dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc)

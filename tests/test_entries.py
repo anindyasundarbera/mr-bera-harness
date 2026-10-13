@@ -207,7 +207,22 @@ class TestRendering:
     def test_changelog_marks_itself_generated(self, tmp_path: Path) -> None:
         text = render_changelog([entry(tmp_path, "a.md", GOOD_CHANGELOG)])
         assert "do not edit by hand" in text
-        assert "knowledge/changelog/" in text
+
+    def test_the_header_states_the_configured_source_path(self) -> None:
+        """The generated file must name where *this* project keeps its entries.
+
+        The header previously hardcoded `knowledge/changelog/`, which was wrong for
+        any project configuring a different path — a library stating a location it
+        was not told.
+        """
+        text = render_changelog([], source_dir="entries/changes")
+        assert "`entries/changes/`" in text
+
+    def test_the_decisions_header_states_the_configured_path(self) -> None:
+        """The case that exposed it: this repository's decisions live elsewhere."""
+        text = render_decisions_index([], source_dir="docs/decisions")
+        assert "`docs/decisions/`" in text
+        assert "knowledge/decisions" not in text
 
     def test_changelog_groups_by_date(self, tmp_path: Path) -> None:
         one = entry(tmp_path, "a.md", GOOD_CHANGELOG)

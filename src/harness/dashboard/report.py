@@ -137,9 +137,25 @@ def _conformance(config: Config) -> Check:
 
 
 def _routing(config: Config) -> Check:
+    """Routing invariants over the bundle's concepts.
+
+    A `pass` over **zero concepts** is a vacuous pass — nothing was checked — so it
+    is reported as `unknown` instead. This is the dashboard's own rule applied to
+    itself: an uninspected thing is not a passing thing. The harness's own bundle
+    triggers it, because `validate_routing` deliberately skips changelog and
+    decision entries, which is all that bundle holds.
+    """
     from harness.routing.invariants import validate_routing  # noqa: PLC0415 - used here
 
     report = validate_routing(config)
+    if report.checked == 0:
+        return Check(
+            "routing invariants",
+            "documentation",
+            "unknown",
+            "no concepts were checked, so this proves nothing; the bundle may hold "
+            "only entries, which routing rules deliberately skip",
+        )
     violations = [str(v) for v in report.violations]
     return Check(
         "routing invariants",
