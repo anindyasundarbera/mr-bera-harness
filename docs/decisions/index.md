@@ -15,3 +15,4 @@ repository makes about its own delivery stay in that repository.
 * [ADR-2026-010](ADR-2026-010-budget-unit-and-no-default.md) - prompt budgets are exact word counts, and the budget is caller-supplied.
 * [ADR-2026-011](ADR-2026-011-dashboard-is-a-viewer.md) - the usage dashboard is a static viewer, not a live actor.
 * [ADR-2026-012](ADR-2026-012-proposals-validated-against-schema.md) - proposals validate against JSON Schema, and the gates may not execute.
+* [ADR-2026-013](ADR-2026-013-session-ledger-in-git-notes.md) - session records live in git notes, and the ledger never executes.
