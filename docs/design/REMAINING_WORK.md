@@ -30,8 +30,8 @@ order, because each closed a gap the project had recorded against itself.
 | Fact | Value |
 |---|---|
 | Derived by | `mr-bera-harness 0.1.0`, via `tools/refresh_handoff.py` |
-| OKF concepts | 21 |
-| Entries | 41 (0 problem(s)) |
+| OKF concepts | 22 |
+| Entries | 42 (0 problem(s)) |
 | Test modules | 23 |
 | Provenance declarations | 2 |
 | Commit types accepted | 11 |
@@ -91,12 +91,9 @@ than a summary here, which would be a second copy to keep in step. The map:
 ## 3. What remains, and what is genuinely undecided
 
 **The build order is complete.** What remains is not a next component; it is the
-`DecisionRequired` list in §5, plus one capability that is deliberately open:
-
-- **`ADR-2026-017` is `Proposed` while `ADR-2026-019` implements it.** The framing
-  record can now be marked `Accepted`, or left `Proposed` if the owner prefers — but
-  the two currently disagree in status about a capability that exists. Recorded as
-  decision 7 below.
+`DecisionRequired` list in §5. The one item that was left deliberately open —
+`ADR-2026-017`'s status — is now closed: it is `Superseded` by `ADR-2026-019`, which
+implemented the capability it proposed (decision 7 below).
 
 ## 4. Open decisions — do not guess these
 
@@ -110,7 +107,7 @@ Each is `DecisionRequired`. None may be supplied by a plausible default.
 | 4 | **`workflow` scope for agent sessions** | no `workflow` scope, so `.github/workflows/**` is pushed over SSH with the owner's key. Recommendation: a narrow, revocable fine-grained token — **not** widening this one, which carries `admin:public_key` | `ADR-2026-015` |
 | 5 | **Postgres locality / index lifecycle** | status quo recorded: **rebuild-on-demand**, no service. Locality and any future service remain the owner's | `ADR-2026-014` |
 | 6 | **`harness ci` has no consumer pipeline** | **`Proposed`, not fixed**: in a consumer it runs the harness's own stages and misdiagnoses the consumer as broken. Refuse clearly vs make it configurable. See §5.1 | `ADR-2026-016` |
-| 7 | **`ADR-2026-017` status** | it is `Proposed` and describes the code↔decision link, which `ADR-2026-019` has now implemented: the two records disagree in status about a capability that exists | `ADR-2026-017` |
+| 7 | ~~`ADR-2026-017` status~~ | **CLOSED** — 017 was `Proposed` while `ADR-2026-019` implemented it. Resolved by supersession: 019 records `supersedes: [ADR-2026-017]` and 017 is `Superseded`, so 017 keeps the proposal it made and the current instruction is unambiguous | `ADR-2026-019` |
 | 8 | **`harness dashboard run` guard scope** | the guard check inspects the *live repository* regardless of the `branch` argument, so it can report a failure the caller never asked about — and one test is environment-dependent as a result. See §5.2 | open |
 
 ### 4.1 A consumer test found what the unit tests could not
@@ -300,3 +297,4 @@ load-bearing part and the schedule is only the convenience.
 | v1.4 | 2026-10-13 | Recorded §5.2: the dashboard's guard check inspects the live repository, making one test environment-dependent. |
 | v2.0 | 2026-10-13 | **All six build-order steps are done.** Replaced the historical §2–§4 with a map to each step's design note and decision, refreshed the decision table (entry-location closed; two new items), and corrected the verification section. |
 | v2.1 | 2026-10-13 | §1's facts are now **generated** (`ADR-2026-020`), so the counts cannot decay; added README-staleness and generated-handoff-facts to the beyond-the-build-order table, and §6.1–§6.2 for the refresher and its scheduled run. |
+| v2.2 | 2026-10-13 | Closed decision 7: `ADR-2026-017` is `Superseded` by `ADR-2026-019` (which implemented it), and the hand-written `docs/decisions/index.md` no longer restates statuses — it points at the generated `docs/DECISIONS_INDEX.md`. |

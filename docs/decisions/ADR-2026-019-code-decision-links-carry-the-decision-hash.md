@@ -6,7 +6,7 @@ title: A code-to-decision link carries the decision's anchor hash, and is declar
 status: Accepted
 decision: Require every code-to-decision declaration to carry the decision's anchor digest over its normative content, so a revised decision flags every implementing file as stale; compute the digest over normative fields and the opening prose only; and keep the link declared by a person and merely verified by the tool.
 covers: [MRB]
-supersedes: []
+supersedes: [ADR-2026-017]
 ---
 
 # Context
