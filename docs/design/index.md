@@ -10,5 +10,6 @@ Why the harness is shaped the way it is.
 * [RESEARCH_DOSSIER.md](RESEARCH_DOSSIER.md) - prior art, and the locally reproduced experiments.
 * [DASHBOARD.md](DASHBOARD.md) - the shipped usage dashboard: a viewer, not an actor.
 * [PROPOSAL_GATES.md](PROPOSAL_GATES.md) - build-order step 4: what may be proposed, and what is refused.
+* [RUNTIME_DEPENDENCIES.md](RUNTIME_DEPENDENCIES.md) - what the harness needs to run anywhere, audited.
 * [SESSION_LEDGER.md](SESSION_LEDGER.md) - build-order step 5: session records in git notes, and a derived mirror.
 * [REMAINING_WORK.md](REMAINING_WORK.md) - build-order state, what is next, and the open decisions.
