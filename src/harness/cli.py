@@ -988,6 +988,109 @@ def cmd_intent(args: argparse.Namespace) -> int:
     return code
 
 
+def cmd_provenance(args: argparse.Namespace) -> int:
+    """Check, and render, the links from source code to the decisions that bind it.
+
+    **This command executes nothing and infers nothing.** A declaration is written by
+    a person; this verifies it. An inferred association would be a guess presented as
+    provenance.
+
+    Exit codes: 0 verified, 1 broken or stale, 2 usage, 3 the index is unreachable.
+    """
+    from harness.provenance import checks  # noqa: PLC0415 - deferred so --help stays fast
+    from harness.provenance.links import (  # noqa: PLC0415 - deferred
+        ProvenanceError,
+        declaration_for,
+        load_decisions,
+    )
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    command = args.provenance_command
+
+    try:
+        if command == "marker":
+            decisions = load_decisions(config.path("decisions"))
+            decision = decisions.get(args.decision_id)
+            if decision is None:
+                print(
+                    f"ERROR: no decision record `{args.decision_id}` in {config.paths.decisions}/",
+                    file=sys.stderr,
+                )
+                return 2
+            print(declaration_for(decision.decision_id, decision.anchor_digest))
+            return 0
+
+        report = checks.check(config, require_every_file_linked=getattr(args, "require_all", False))
+    except ProvenanceError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    if command == "check":
+        if args.json:
+            print(json.dumps(report.as_dict(), indent=2, default=str))
+        else:
+            print(checks.render(report))
+        return 0 if report.ok else 1
+
+    if command == "list":
+        if args.json:
+            print(json.dumps([d.as_dict() for d in report.declarations], indent=2))
+        elif not report.declarations:
+            print("no declarations")
+        else:
+            for declaration in report.declarations:
+                print(
+                    f"{declaration.path}:{declaration.line}  "
+                    f"{declaration.decision_id}  sha256:{declaration.digest}"
+                )
+        return 0
+
+    if command == "map":
+        index = checks.by_decision(report)
+        if args.json:
+            print(
+                json.dumps(
+                    {k: [d.as_dict() for d in v] for k, v in sorted(index.items())}, indent=2
+                )
+            )
+        elif not index:
+            print("no declarations")
+        else:
+            for decision_id, declarations in sorted(index.items()):
+                decision = report.decisions.get(decision_id)
+                title = decision.title if decision else "(no such decision)"
+                print(f"{decision_id}  {title[:60]}")
+                for declaration in declarations:
+                    print(f"    {declaration.path}:{declaration.line}")
+        return 0
+
+    if command == "index":
+        from harness.index.store import (  # noqa: PLC0415 - deferred
+            IndexUnavailableError,
+            connect,
+        )
+        from harness.provenance import store as prov_store  # noqa: PLC0415 - deferred
+
+        dsn = args.dsn or os.environ.get("MRB_HARNESS_DSN")
+        try:
+            conn = connect(dsn)
+        except IndexUnavailableError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 3
+        with conn:
+            count = prov_store.write_links(conn, config)
+            print(f"indexed {count} declaration(s)")
+        return 0
+
+    print(f"ERROR: unknown provenance command {command!r}", file=sys.stderr)  # pragma: no cover
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -1234,6 +1337,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p.set_defaults(func=cmd_intent)
+
+    p = sub.add_parser("provenance", help="link source code to the decisions that bind it")
+    prov_sub = p.add_subparsers(dest="provenance_command", required=True)
+
+    prov_common = argparse.ArgumentParser(add_help=False)
+    prov_common.add_argument("--json", action="store_true", help="emit JSON")
+
+    prov_check = prov_sub.add_parser(
+        "check", parents=[prov_common], help="verify every declaration against its decision"
+    )
+    prov_check.add_argument(
+        "--require-all",
+        action="store_true",
+        help="also report source files that carry no declaration",
+    )
+
+    prov_sub.add_parser(
+        "list", parents=[prov_common], help="every declaration, and which decision it names"
+    )
+
+    prov_marker = prov_sub.add_parser(
+        "marker", help="print the declaration line for a decision, ready to paste"
+    )
+    prov_marker.add_argument("decision_id")
+
+    prov_sub.add_parser("map", parents=[prov_common], help="which files declare each decision")
+
+    prov_index = prov_sub.add_parser(
+        "index", parents=[prov_common], help="write the links into the optional index"
+    )
+    prov_index.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+
+    p.set_defaults(func=cmd_provenance)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)

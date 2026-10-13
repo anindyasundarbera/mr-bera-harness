@@ -43,6 +43,7 @@ class TestSubcommandCoverage:
         "propose",
         "ledger",
         "intent",
+        "provenance",
         "doctor",
     }
 

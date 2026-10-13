@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-019` | 2026-10-13 | A code-to-decision link carries the decision's anchor hash, and is declared never inferred | Accepted | — |
 | `ADR-2026-018` | 2026-10-13 | Instruction resolution refuses rather than guesses, and calls no model | Accepted | — |
 | `ADR-2026-017` | 2026-10-13 | Propose linking source code to the decisions that produced it | Proposed | — |
 | `ADR-2026-016` | 2026-10-13 | The local CI rehearsal refuses to run a project it has no pipeline for | Proposed | — |
