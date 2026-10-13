@@ -2,11 +2,14 @@
 
 > **Generated file — do not edit by hand.**
 > Regenerate with `harness entries generate`.
-> The authoritative entries live in `knowledge/decisions/`.
+> The authoritative entries live in `docs/decisions/`.
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
 | `ADR-2026-017` | 2026-10-13 | Propose linking source code to the decisions that produced it | Proposed | — |
+| `ADR-2026-016` | 2026-10-13 | The local CI rehearsal refuses to run a project it has no pipeline for | Proposed | — |
+| `ADR-2026-015` | 2026-10-13 | Workflow changes route through SSH while agent credentials lack the workflow scope | Accepted | — |
+| `ADR-2026-014` | 2026-10-13 | No PostgreSQL version is pinned, and the index stays rebuild-on-demand | Accepted | — |
 | `ADR-2026-013` | 2026-10-13 | Session records live in git notes, and the ledger never executes | Accepted | — |
 | `ADR-2026-012` | 2026-10-13 | The gates validate against JSON Schema via the standard library, and may not execute | Accepted | — |
 | `ADR-2026-011` | 2026-10-13 | The usage dashboard is a static viewer, not a live actor | Accepted | — |

@@ -16,4 +16,7 @@ repository makes about its own delivery stay in that repository.
 * [ADR-2026-011](ADR-2026-011-dashboard-is-a-viewer.md) - the usage dashboard is a static viewer, not a live actor.
 * [ADR-2026-012](ADR-2026-012-proposals-validated-against-schema.md) - proposals validate against JSON Schema, and the gates may not execute.
 * [ADR-2026-013](ADR-2026-013-session-ledger-in-git-notes.md) - session records live in git notes, and the ledger never executes.
+* [ADR-2026-014](ADR-2026-014-no-version-pin-rebuild-on-demand.md) - no PostgreSQL version is pinned, and the index stays rebuild-on-demand.
+* [ADR-2026-015](ADR-2026-015-workflow-changes-over-ssh.md) - workflow changes route over SSH while agent credentials lack the workflow scope.
+* [ADR-2026-016](ADR-2026-016-ci-rehearsal-needs-a-pipeline.md) - **Proposed**: the local CI rehearsal runs the harness's own pipeline in a consumer.
 * [ADR-2026-017](ADR-2026-017-code-to-decision-provenance.md) - **Proposed**: link source code to the decisions that produced it.

@@ -245,14 +245,21 @@ def validate_all(
     return result
 
 
-def render_changelog(entries: list[Entry]) -> str:
-    """Render CHANGELOG.md from changelog entries, newest first."""
+def render_changelog(entries: list[Entry], source_dir: str = "knowledge/changelog") -> str:
+    """Render CHANGELOG.md from changelog entries, newest first.
+
+    `source_dir` is where the authoritative entries live **for this project**, read
+    from `harness.toml`. It is a parameter because the header previously hardcoded
+    `knowledge/changelog/`, which was wrong for any project that configures a
+    different path — including this repository, whose decisions live in
+    `docs/decisions`. A generated file must not state a location it was not told.
+    """
     lines = [
         "# Changelog",
         "",
         "> **Generated file — do not edit by hand.**",
         "> Regenerate with `harness entries generate`.",
-        "> The authoritative entries live in `knowledge/changelog/`.",
+        f"> The authoritative entries live in `{source_dir}/`.",
         "",
     ]
     by_date: dict[str, list[Entry]] = {}
@@ -283,14 +290,18 @@ def render_changelog(entries: list[Entry]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_decisions_index(entries: list[Entry]) -> str:
-    """Render the ADR index from ADR entries, newest first."""
+def render_decisions_index(entries: list[Entry], source_dir: str = "knowledge/decisions") -> str:
+    """Render the ADR index from ADR entries, newest first.
+
+    `source_dir` is the project's configured decisions path; see `render_changelog`
+    for why it is not hardcoded.
+    """
     lines = [
         "# Architecture Decision Index",
         "",
         "> **Generated file — do not edit by hand.**",
         "> Regenerate with `harness entries generate`.",
-        "> The authoritative entries live in `knowledge/decisions/`.",
+        f"> The authoritative entries live in `{source_dir}/`.",
         "",
         "| ID | Date | Title | Status | Supersedes |",
         "|---|---|---|---|---|",
@@ -331,9 +342,14 @@ def generate(
     changes = [e for e in result.entries if e.kind == "changelog"]
     adrs = [e for e in result.entries if e.kind == "adr"]
 
+    # The paths come from the project's configuration, so the generated header
+    # states where *this* project keeps its entries.
+    from harness.config import load_config  # noqa: PLC0415 - deferred to avoid a cycle
+
+    config = load_config(Path.cwd())
     targets = {
-        changelog_md: render_changelog(changes),
-        decisions_index_md: render_decisions_index(adrs),
+        changelog_md: render_changelog(changes, config.paths.changelog),
+        decisions_index_md: render_decisions_index(adrs, config.paths.decisions),
     }
 
     messages: list[str] = []
