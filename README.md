@@ -21,7 +21,17 @@ names the blocker instead of letting an agent proceed on a plausible guess.
 ## Install
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
+```
+
+That is the whole requirement: **Python ≥ 3.11, `git`, and PyYAML.** No database, no
+server and no network — see [docs/design/RUNTIME_DEPENDENCIES.md](docs/design/RUNTIME_DEPENDENCIES.md).
+The extras are optional and each fails loudly, with the fix in its message, when
+absent: `[postgres]` for the derived index and ledger mirror, `[propose]` for
+proposal gating, `[dev]` for development.
+
+```bash
+pip install -e ".[dev]"       # to work on the harness itself
 ```
 
 ## Configure
