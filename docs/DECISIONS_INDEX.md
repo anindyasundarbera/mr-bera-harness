@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-009` | 2026-10-13 | Scope fields are indexed element-wise so a scope query cannot over-select | Accepted | — |
 | `ADR-2026-008` | 2026-10-13 | The build rehearsal does not gate on session guards | Accepted | — |
 | `ADR-2026-007` | 2026-10-13 | The local CI runner resolves the invoking repository, not the package directory | Accepted | — |
 | `ADR-2026-006` | 2026-10-13 | The document index is derived from git and must rebuild identically | Accepted | — |

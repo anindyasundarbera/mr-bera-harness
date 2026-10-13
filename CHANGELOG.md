@@ -6,6 +6,117 @@
 
 ## 2026-10-13
 
+### Added: Query API — lookups answered by SQL, not by reading files
+
+*Implemented build-order step 2, a query surface over the derived index; list-valued scope fields are indexed element-wise so a scope query cannot silently select child scopes, and the SQL answers are tested against the Python resolver.*
+
+- **ID:** `CHG-2026-008`  
+- **Covers:** `MRB`
+
+Implements build-order step 2 of `HARNESS_ARCHITECTURE.md` §9: *the lookup surface
+that replaces file-reading*. Most agent questions are lookups wearing a costume,
+and each one answered by code removes tokens and a hallucination surface.
+
+## Commands
+
+| Command | Question it replaces |
+|---|---|
+| `query documents` | list the corpus |
+| `query show <id>` | what does this document say it is? |
+| `query search <text>` | which document mentions this? |
+| `query links <id> [--direction in\|out]` | what does this depend on? |
+| `query touching <work-id> [--field …]` | which documents cover this scope? |
+| `query blocked <work-id>` | is this blocked? |
+| `query stops [--state …]` | which work items are blocked, and by what? |
+| `query decisions [--status …]` | what is decided? |
+| `query gaps [--state …]` | what does the gap register hold? |
+
+All accept `--json`; `--dsn` overrides the environment.
+
+## The schema decision
+
+Step 1 stored `covers` as JSON text, so a scope query could only be a substring
+match — and `%MRB-M06%` also matches `MRB-M06-S07`. That silently over-selects
+every child scope: an agent would be handed documents it believes bind its work
+item, with nothing in the output saying otherwise.
+
+List-valued routing fields are now projected **one row per element** into
+`document_field_items`, so a scope query is an exact join. `MRB-M06` selects only
+documents that name `MRB-M06`. Over-selection is structurally impossible rather
+than merely tested for. See `ADR-2026-009`.
+
+The step 1 invariant is untouched: `read_model` still reconstructs from
+`document_fields`, so the digest and the rebuild-identity test are unchanged.
+`INDEX_SCHEMA_VERSION` is 2.
+
+## Cross-checked, not assumed
+
+`blocked` and `touching` restate logic `harness.routing.resolve` already
+implements. A test compares the SQL answers with `resolve_context` over the same
+committed model, and a divergence fails — the Python resolver is the reference,
+because that is what an agent actually runs.
+
+Verified against a **real consumer** (`mr_bera`, 34 documents, 17 registry
+tables) on three work items. The SQL and Python answers matched exactly:
+
+| Work item | Both report |
+|---|---|
+| `MRB-M06-S07` | `DESIGN-RUBRIC-01`, `EVID-AI-HW-01`, `IMG-DIM-01` |
+| `MRB-M06-S14-C02` | `CONTROL-STORE-01` |
+| `MRB-M02` | none |
+
+`query stops` on that corpus returns **12** `BlockedOwner` rows in one query —
+the join §5.2 says belongs in SQL, which previously meant reading every `Unknown`
+concept and correlating by hand.
+
+## Honesty in the exit codes
+
+Without a DSN, a query exits **3** rather than reporting "nothing applies". An
+unreachable index and an empty index are different things; conflating them would
+hand an agent a false clean bill of health. Usage errors are validated *before* a
+connection is attempted, so a mistyped field name reports the field, not a
+connection failure.
+
+## A safety defect found and fixed
+
+The database fixtures fell back to `MRB_HARNESS_DSN` — the same variable that
+points at a real index — and they call `reset`, which drops the tables. A test run
+against that variable therefore **destroyed an indexed consumer project**, which
+is exactly what happened once during development. The fixtures now require
+`MRB_TEST_DSN` with no fallback, and a test run with only `MRB_HARNESS_DSN` set
+leaves the real index intact (verified: all 12 rows survived).
+
+## CI now runs a database, because the coverage floor said so
+
+The first CI run of this branch failed **all three test jobs while every test
+passed** (`338 passed, 66 skipped`). The cause was the coverage floor:
+
+```
+FAIL Required test coverage of 80.0% not reached. Total coverage: 79.02%
+```
+
+Requiring a separate test DSN also meant CI skipped the whole derived-store layer
+— ~350 statements in the modules this step adds — so the floor was being enforced
+against code CI never ran. Both symptoms have one cause.
+
+The `test` job now runs a `postgres:16` service and installs the `postgres`
+extra, so the index and query tests execute instead of skipping. Coverage rises
+from 79% to **91%** as a side effect, which is the honest measure: the code is
+now actually exercised rather than excluded.
+
+Two alternatives were rejected. Silencing the derived-store modules in the
+coverage config would raise the number by measuring less — the opposite of what a
+floor is for. Lowering the floor below 80% would make the number pass while
+leaving the layer untested. Neither makes anything more correct.
+
+Verified locally against both DSN states before pushing: **338 passed** without a
+database, **404 passed / 91.16%** with one. The rehearsal (`harness ci`) runs no
+coverage gate, so it is green either way.
+
+**Tests:** 338 passing without a DSN; **404 with a live PostgreSQL**, coverage
+91.2%. Lint, format, `mypy --strict`, `harness doctor`, `harness guards` and
+`harness ci` all clean.
+
 ### Fixed: The build rehearsal no longer fails on the default branch
 
 *harness ci ran the session guards, which refuse a protected branch by design, so the build was red on main while every build check passed; the rehearsal now asserts tree properties only.*

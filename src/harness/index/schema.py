@@ -12,7 +12,7 @@ from __future__ import annotations
 
 #: Bumped with the DDL below. Written into `index_meta` so a stale or foreign
 #: schema can be refused instead of read as if it were current.
-INDEX_SCHEMA_VERSION = 1
+INDEX_SCHEMA_VERSION = 2
 
 DDL = """
 CREATE TABLE IF NOT EXISTS index_meta (
@@ -41,6 +41,20 @@ CREATE TABLE IF NOT EXISTS document_fields (
     key   text NOT NULL,
     value text NOT NULL,
     PRIMARY KEY (path, key)
+);
+
+-- List-valued routing fields, one row per element.
+--
+-- Without this, `covers` and `blocks` are only JSON text, so a scope query has
+-- to match substrings — and `MRB-M06` would falsely match `MRB-M06-S07`, which
+-- is exactly the kind of silent over-selection the resolver exists to avoid.
+-- Element-wise rows make scope intersection a join.
+CREATE TABLE IF NOT EXISTS document_field_items (
+    path  text NOT NULL REFERENCES documents(path) ON DELETE CASCADE,
+    key   text NOT NULL,
+    item  text NOT NULL,
+    ordinal integer NOT NULL,
+    PRIMARY KEY (path, key, ordinal)
 );
 
 CREATE TABLE IF NOT EXISTS document_links (
@@ -76,6 +90,8 @@ CREATE TABLE IF NOT EXISTS registry_cells (
 CREATE INDEX IF NOT EXISTS documents_doc_type_idx ON documents (doc_type);
 CREATE INDEX IF NOT EXISTS document_fields_key_idx ON document_fields (key);
 CREATE INDEX IF NOT EXISTS document_links_dst_idx ON document_links (dst);
+CREATE INDEX IF NOT EXISTS document_field_items_lookup_idx
+    ON document_field_items (key, item);
 """
 
 #: Dropped in dependency order, children first, so `reset` never fails on a
@@ -85,6 +101,7 @@ DROP TABLE IF EXISTS registry_cells;
 DROP TABLE IF EXISTS registry_rows;
 DROP TABLE IF EXISTS registry_tables;
 DROP TABLE IF EXISTS document_links;
+DROP TABLE IF EXISTS document_field_items;
 DROP TABLE IF EXISTS document_fields;
 DROP TABLE IF EXISTS documents;
 DROP TABLE IF EXISTS index_meta;
