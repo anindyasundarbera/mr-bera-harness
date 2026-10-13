@@ -28,7 +28,9 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from harness import __version__
 from harness.config import Config, ConfigError, describe, load_config
@@ -381,6 +383,138 @@ def cmd_index(args: argparse.Namespace) -> int:
         return 0
 
 
+def cmd_query(args: argparse.Namespace) -> int:
+    """Look up documents, links and blockers in the derived index.
+
+    A query answers with code, so the question never reaches a model — which is
+    the token saving the architecture is built on. Exit code 3 means the derived
+    store is unreachable, matching `harness index`.
+    """
+    from harness.index.store import (  # noqa: PLC0415 - deferred so --help stays fast
+        IndexUnavailableError,
+        connect,
+    )
+    from harness.query import engine  # noqa: PLC0415 - deferred so --help stays fast
+
+    # Validate usage before reaching for a database: an argument error is a
+    # usage error whether or not a DSN happens to be reachable.
+    if args.query_command == "touching" and args.field not in engine.SCOPE_FIELDS:
+        print(
+            f"ERROR: field must be one of {', '.join(engine.SCOPE_FIELDS)}, not {args.field!r}",
+            file=sys.stderr,
+        )
+        return 2
+
+    dsn = args.dsn or os.environ.get("MRB_HARNESS_DSN")
+    try:
+        conn = connect(dsn)
+    except IndexUnavailableError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        print("Queries read the derived index; set MRB_HARNESS_DSN or pass --dsn.")
+        return 3
+
+    command = args.query_command
+    try:
+        with conn:
+            if command == "documents":
+                doc_rows = engine.documents(
+                    conn, doc_type=args.type, status=args.status, limit=args.limit
+                )
+                _emit(args, [r.as_dict() for r in doc_rows], _print_rows)
+            elif command == "show":
+                row = engine.show(conn, args.concept_id)
+                if row is None:
+                    print(f"not found: {args.concept_id}", file=sys.stderr)
+                    return 1
+                _emit(args, row.as_dict(), _print_row)
+            elif command == "search":
+                found_rows = engine.search(conn, args.text, limit=args.limit)
+                _emit(args, [r.as_dict() for r in found_rows], _print_rows)
+            elif command == "links":
+                targets = engine.links(conn, args.concept_id, direction=args.direction)
+                _emit(args, targets, _print_lines)
+            elif command == "touching":
+                touch_rows = engine.touching(conn, args.work_id, field_name=args.field)
+                _emit(args, [r.as_dict() for r in touch_rows], _print_rows)
+            elif command == "blocked":
+                stops = engine.blocked(conn, args.work_id)
+                _emit(args, [s.as_dict() for s in stops], _print_blocked)
+            elif command == "stops":
+                stop_rows = engine.stops(conn, state=args.state)
+                _emit(args, stop_rows, _print_stops)
+            elif command == "decisions":
+                decision_rows = engine.decisions(conn, status=args.status)
+                _emit(args, [r.as_dict() for r in decision_rows], _print_rows)
+            elif command == "gaps":
+                gap_rows = engine.gaps(conn, state=args.state)
+                _emit(args, gap_rows, _print_gaps)
+            else:  # pragma: no cover - argparse enforces the choice
+                print(f"ERROR: unknown query {command!r}", file=sys.stderr)
+                return 2
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _emit(args: argparse.Namespace, payload: object, printer: Callable[[Any], None]) -> None:
+    """Print as JSON when asked, otherwise through the text printer."""
+    if args.json:
+        print(json.dumps(payload, indent=2, default=str))
+    else:
+        printer(payload)
+
+
+def _print_row(row: dict[str, Any]) -> None:
+    print(f"{row['concept_id']}  [{row['doc_type']}]  {row['title']}")
+    print(f"  path: {row['path']}")
+
+
+def _print_rows(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        print("(none)")
+        return
+    for row in rows:
+        _print_row(row)
+
+
+def _print_blocked(stops: list[dict[str, Any]]) -> None:
+    if not stops:
+        print("no stop conditions apply")
+        return
+    for stop in stops:
+        print(f"STOP  {stop['title']}  [{stop['state']}]  blocker={stop['blocker']}")
+        if stop["if_you_guess"]:
+            print(f"      if you guess: {stop['if_you_guess']}")
+        for rule in stop["must_not_do"]:
+            print(f"      must not: {rule}")
+
+
+def _print_stops(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        print("no stop conditions")
+        return
+    for row in rows:
+        print(f"{row['work_item']:<20} {row['blocker']:<20} {row['state']:<14} {row['title']}")
+
+
+def _print_gaps(rows: list[dict[str, str]]) -> None:
+    if not rows:
+        print("(none)")
+        return
+    for row in rows:
+        identifier = row.get("Gap ID", "?")
+        print(f"{identifier}  {row}")
+
+
+def _print_lines(values: list[str]) -> None:
+    if not values:
+        print("(none)")
+        return
+    for value in values:
+        print(value)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -434,6 +568,59 @@ def build_parser() -> argparse.ArgumentParser:
     status = index_sub.add_parser("status", help="show the current index's identity")
     status.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
     p.set_defaults(func=cmd_index)
+
+    # `--dsn` and `--json` are attached to each query subcommand rather than to
+    # the `query` parser: argparse does not let a subparser inherit its parent's
+    # options, so `harness query documents --json` — the form a user will type —
+    # would otherwise fail.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+    common.add_argument("--json", action="store_true", help="emit JSON instead of text")
+
+    p = sub.add_parser("query", help="look up documents, links and blockers in the index")
+    query_sub = p.add_subparsers(dest="query_command", required=True)
+
+    docs = query_sub.add_parser("documents", parents=[common], help="list documents")
+    docs.add_argument("--type", help="filter by concept type")
+    docs.add_argument("--status", help="filter by status")
+    docs.add_argument("--limit", type=int, help="at most this many")
+
+    one = query_sub.add_parser("show", parents=[common], help="one document by id or path")
+    one.add_argument("concept_id")
+
+    find = query_sub.add_parser("search", parents=[common], help="documents mentioning text")
+    find.add_argument("text")
+    find.add_argument("--limit", type=int, default=50)
+
+    lnk = query_sub.add_parser(
+        "links", parents=[common], help="documents linked from, or to, one document"
+    )
+    lnk.add_argument("concept_id")
+    lnk.add_argument("--direction", choices=["in", "out"], default="out")
+
+    touch = query_sub.add_parser(
+        "touching", parents=[common], help="documents whose field names a work item"
+    )
+    touch.add_argument("work_id")
+    touch.add_argument("--field", default="covers", help="one of: covers depends_on blocks tags")
+
+    block = query_sub.add_parser(
+        "blocked", parents=[common], help="stop conditions that apply to a work item"
+    )
+    block.add_argument("work_id")
+
+    stops_cmd = query_sub.add_parser(
+        "stops", parents=[common], help="every stop condition and what it blocks"
+    )
+    stops_cmd.add_argument("--state", help="filter by blocker state, e.g. BlockedOwner")
+
+    dec = query_sub.add_parser("decisions", parents=[common], help="decision records")
+    dec.add_argument("--status", help="filter by decision status")
+
+    gap = query_sub.add_parser("gaps", parents=[common], help="rows from a gap register")
+    gap.add_argument("--state", help="filter by gap state")
+
+    p.set_defaults(func=cmd_query)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)

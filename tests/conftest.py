@@ -192,9 +192,16 @@ def pg_conn() -> Iterator[Any]:
     CI fails on a machine with no database. They *do* run for real wherever a DSN
     is supplied, which is where the rebuild invariant is actually proven.
     """
-    dsn = os.environ.get("MRB_TEST_DSN") or os.environ.get("MRB_HARNESS_DSN")
+    # `MRB_TEST_DSN` only — deliberately no fallback to `MRB_HARNESS_DSN`.
+    #
+    # The fixtures call `reset`, which drops and recreates the index tables. A
+    # fallback meant a suite run against a DSN that also held a real index would
+    # destroy it, which is exactly what happened once during development: a test
+    # run wiped the indexed consumer project. Requiring a separate, explicitly
+    # named test database makes that impossible rather than merely unlikely.
+    dsn = os.environ.get("MRB_TEST_DSN")
     if not dsn:
-        pytest.skip("no PostgreSQL DSN; set MRB_TEST_DSN to exercise the index layer")
+        pytest.skip("no MRB_TEST_DSN; set it to a throwaway database to exercise the store")
     from harness.index.store import (  # noqa: PLC0415 - optional extra, imported on demand
         IndexUnavailableError,
         connect,

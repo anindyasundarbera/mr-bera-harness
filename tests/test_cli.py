@@ -8,10 +8,13 @@ nothing — which is how the guards were once dropped from the CLI entirely.
 from __future__ import annotations
 
 import json
+import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from tests.conftest import HARNESS_TOML, git_commit_all, write_concept
 
 from harness.cli import build_parser, main
 
@@ -34,6 +37,7 @@ class TestSubcommandCoverage:
         "entries",
         "ci",
         "index",
+        "query",
         "doctor",
     }
 
@@ -188,6 +192,166 @@ class TestDoctor:
 
     def test_doctor_without_config_errors(self, tmp_path: Path) -> None:
         assert main(["--root", str(tmp_path), "doctor"]) == 2
+
+
+class TestQuery:
+    """`harness query` must be reachable and must not invent an answer.
+
+    Without a DSN it exits 3 — the derived store is unreachable — rather than
+    reporting "nothing applies", which would be a lie an agent could act on.
+    """
+
+    def test_query_without_dsn_is_three(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(project)
+        monkeypatch.delenv("MRB_HARNESS_DSN", raising=False)
+        assert main(["query", "documents"]) == 3
+
+    def test_query_without_dsn_explains_itself(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.chdir(project)
+        monkeypatch.delenv("MRB_HARNESS_DSN", raising=False)
+        main(["query", "blocked", "MRB-M06"])
+        err = capsys.readouterr().err
+        assert "MRB_HARNESS_DSN" in err
+
+    def test_unknown_field_is_a_usage_error(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The field name is validated before any connection is attempted.
+
+        A usage error must not depend on a database being reachable, or the
+        message a user gets is about the wrong problem.
+        """
+        monkeypatch.chdir(project)
+        monkeypatch.setenv("MRB_HARNESS_DSN", "postgresql://postgres@127.0.0.1:1/none")
+        assert main(["query", "touching", "MRB-M06", "--field", "title"]) == 2
+
+    def test_bad_direction_is_rejected_by_the_parser(self) -> None:
+        """`--direction` is constrained by argparse, so it never reaches a query."""
+        with pytest.raises(SystemExit):
+            main(["query", "links", "x", "--direction", "sideways"])
+
+
+class TestQueryCommandsReachTheEngine:
+    """Each query subcommand must be wired, and must answer from the index.
+
+    A subcommand that silently did nothing would be worse than a missing one,
+    because an agent would read "no results" as a fact.
+    """
+
+    @pytest.fixture
+    def indexed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+        """A tiny indexed consumer project, reachable through the real CLI path."""
+        root = tmp_path / "consumer"
+        for sub in ("docs", "knowledge/modules", "tests", "tools"):
+            (root / sub).mkdir(parents=True, exist_ok=True)
+        (root / "harness.toml").write_text(HARNESS_TOML, encoding="utf-8")
+        write_concept(
+            root,
+            "knowledge/modules/M06.md",
+            "type: Module\nmodule: MRB-M06\ncovers: [MRB-M06]\nread_budget: must-read",
+            "## Purpose\n\nBody.\n",
+        )
+        git_commit_all(root)
+
+        dsn = os.environ.get("MRB_TEST_DSN")
+        if not dsn:
+            pytest.skip("no MRB_TEST_DSN")
+        from harness.config import load_config  # noqa: PLC0415 - only this fixture needs it
+        from harness.extract.source import model_from_git  # noqa: PLC0415
+        from harness.index.store import (  # noqa: PLC0415
+            IndexUnavailableError,
+            connect,
+            reset,
+            write_model,
+        )
+
+        try:
+            conn = connect(dsn)
+        except IndexUnavailableError as exc:  # pragma: no cover - environment dependent
+            pytest.skip(f"PostgreSQL unavailable: {exc}")
+        reset(conn)
+        write_model(conn, model_from_git(root, load_config(root)))
+        conn.close()
+
+        monkeypatch.chdir(root)
+        monkeypatch.setenv("MRB_HARNESS_DSN", dsn)
+        yield root
+
+    def test_documents_returns_rows(
+        self, indexed: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["query", "documents"]) == 0
+        assert "modules/M06" in capsys.readouterr().out
+
+    def test_json_output_is_parseable(
+        self, indexed: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["query", "documents", "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert isinstance(payload, list)
+        assert payload[0]["concept_id"] == "modules/M06"
+
+    def test_show_returns_one_document(
+        self, indexed: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["query", "show", "modules/M06"]) == 0
+        assert "M06" in capsys.readouterr().out
+
+    def test_show_missing_is_one(self, indexed: Path) -> None:
+        assert main(["query", "show", "nope/nothing"]) == 1
+
+    def test_search_finds_it(self, indexed: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        assert main(["query", "search", "M06"]) == 0
+        assert "modules/M06" in capsys.readouterr().out
+
+    def test_links_runs(self, indexed: Path) -> None:
+        assert main(["query", "links", "modules/M06"]) == 0
+
+    def test_touching_finds_the_scope(
+        self, indexed: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["query", "touching", "MRB-M06"]) == 0
+        assert "modules/M06" in capsys.readouterr().out
+
+    def test_blocked_runs_and_reports_none(
+        self, indexed: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["query", "blocked", "MRB-M06"]) == 0
+        assert "no stop conditions" in capsys.readouterr().out
+
+    def test_stops_runs(self, indexed: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        assert main(["query", "stops"]) == 0
+        assert "no stop conditions" in capsys.readouterr().out
+
+    def test_decisions_runs(self, indexed: Path) -> None:
+        assert main(["query", "decisions"]) == 0
+
+    def test_gaps_runs(self, indexed: Path) -> None:
+        assert main(["query", "gaps"]) == 0
+
+
+class TestIndex:
+    def test_index_without_dsn_is_three(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(project)
+        monkeypatch.delenv("MRB_HARNESS_DSN", raising=False)
+        assert main(["index", "status"]) == 3
+
+    def test_index_status_does_not_need_a_revision(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`status` reads the store; only build and verify read git.
+
+        A missing `--rev` must not crash the command that inspects the index.
+        """
+        monkeypatch.chdir(project)
+        monkeypatch.delenv("MRB_HARNESS_DSN", raising=False)
+        assert main(["index", "status"]) == 3  # fails on the DSN, not on a revision
 
 
 class TestTopLevel:

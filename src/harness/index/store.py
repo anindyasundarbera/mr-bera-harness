@@ -113,10 +113,23 @@ def write_model(conn: Connection[Any], model: IndexModel) -> str:
                 (doc.path, doc.concept_id, doc.doc_type, doc.title, doc.status, list(doc.headings)),
             )
             for key in sorted(doc.fields):
+                value = doc.fields[key]
                 cur.execute(
                     "INSERT INTO document_fields (path, key, value) VALUES (%s, %s, %s)",
-                    (doc.path, key, _field_text(doc.fields[key])),
+                    (doc.path, key, _field_text(value)),
                 )
+                # List elements go in element-wise so a scope query is a join,
+                # not a substring match. Scalars are included too, so a lookup
+                # for a single value needs no branch.
+                items = value if isinstance(value, list) else [value]
+                for ordinal, item in enumerate(items):
+                    cur.execute(
+                        """
+                        INSERT INTO document_field_items (path, key, item, ordinal)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (doc.path, key, str(item), ordinal),
+                    )
             for ordinal, dst in enumerate(doc.links_out):
                 cur.execute(
                     "INSERT INTO document_links (src, dst, ordinal) VALUES (%s, %s, %s)",
