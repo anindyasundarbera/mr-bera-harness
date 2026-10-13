@@ -715,6 +715,206 @@ def cmd_propose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ledger(args: argparse.Namespace) -> int:
+    """Append to, or read, the session ledger in `git notes`.
+
+    **This command executes nothing on the model's behalf.** `append` records what
+    happened; `--gate` asks the proposal gates for a verdict and records it. No
+    path here applies a proposal.
+
+    Exit codes: 0 fine, 1 integrity problem, 3 the mirror is unreachable,
+    4 usage error.
+    """
+    from harness.ledger import notes as notes_mod  # noqa: PLC0415 - deferred
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+
+    root, ref = config.root, args.ref
+    command = args.ledger_command
+
+    try:
+        if command == "append":
+            return _ledger_append(args, config, root, ref, notes_mod)
+    except (notes_mod.NotesError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+
+    if command == "show":
+        try:
+            records = notes_mod.read_note(root, args.commit, ref=ref)
+        except notes_mod.NotesError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        _emit_ledger(args, [r.as_dict() for r in records], records)
+        return 0
+
+    if command == "list":
+        try:
+            records = notes_mod.read_all(root, ref=ref)
+        except notes_mod.NotesError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        _emit_ledger(args, [r.as_dict() for r in records], records)
+        return 0
+
+    if command == "transport":
+        push, fetch = notes_mod.push_commands(ref)
+        print("# A git notes ref is not carried by a plain clone or fetch.")
+        print("# Transport it explicitly, or the ledger will not reach another machine:")
+        print(push)
+        print(fetch)
+        return 0
+
+    if command == "verify":
+        return _ledger_verify(args, root, ref, notes_mod)
+
+    if command == "mirror":
+        from harness.index.store import (  # noqa: PLC0415 - deferred
+            IndexUnavailableError,
+            connect,
+        )
+        from harness.ledger import mirror as mirror_mod  # noqa: PLC0415 - deferred
+
+        dsn = args.dsn or os.environ.get("MRB_HARNESS_DSN")
+        try:
+            conn = connect(dsn)
+        except IndexUnavailableError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 3
+        with conn:
+            count = mirror_mod.write_mirror(root, conn)
+            print(f"mirrored {count} record(s)")
+            print(f"digest: {mirror_mod.mirror_digest(conn)}")
+        return 0
+
+    print(f"ERROR: unknown ledger command {command!r}", file=sys.stderr)  # pragma: no cover
+    return 4
+
+
+def _ledger_append(
+    args: argparse.Namespace,
+    config: Any,
+    root: Any,
+    ref: str,
+    notes_mod: Any,
+) -> int:
+    """Build and append one record.
+
+    Imports what it needs, as the other command bodies do, rather than taking nine
+    collaborators as positional arguments.
+    """
+    import datetime as _dt  # noqa: PLC0415 - only used here
+
+    from harness.ledger.record import Effect, PromptRef, SessionRecord  # noqa: PLC0415
+
+    proposal = None
+    if args.proposal:
+        proposal = json.loads(Path(args.proposal).read_text(encoding="utf-8"))
+
+    verdict = None
+    if args.gate:
+        if proposal is None:
+            print("ERROR: --gate needs --proposal", file=sys.stderr)
+            return 4
+        from harness.propose.gate import gate_proposal  # noqa: PLC0415 - deferred
+
+        manifest = [m.strip() for m in (args.manifest or "").split(",") if m.strip()] or None
+        verdict = gate_proposal(proposal, config=config, manifest=manifest).as_dict()
+
+    sha = notes_mod._git(root, "rev-parse", args.commit).stdout.strip()
+    if not sha:
+        print(f"ERROR: cannot resolve {args.commit!r}", file=sys.stderr)
+        return 4
+
+    prompt = (
+        PromptRef(
+            fingerprint=args.prompt_fingerprint, budget=args.budget or 0, unit=args.unit or ""
+        )
+        if args.prompt_fingerprint
+        else None
+    )
+
+    def build(session_id: str) -> Any:
+        return SessionRecord(
+            session_id=session_id,
+            work_id=args.work_id,
+            commit_sha=sha,
+            at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+            prompt=prompt,
+            proposal=proposal,
+            verdict=verdict,
+            effect=Effect(state=args.effect or "not-observed", detail=args.effect_detail),
+        )
+
+    record = build(args.session_id or "")
+    if not record.session_id:
+        # The digest is over the record, so a first pass is needed to compute it;
+        # the session id is then that digest, which is stable and collision-free.
+        record = build(build("").digest[:16])
+
+    notes_mod.append_record(root, record, ref=ref)
+    if args.json:
+        print(json.dumps(record.as_dict(), indent=2, default=str))
+    else:
+        print(f"recorded session {record.session_id} on {sha[:12]}")
+        if verdict:
+            print(f"  verdict: {verdict['summary']}")
+    return 0
+
+
+def _ledger_verify(args: argparse.Namespace, root: Any, ref: str, notes_mod: Any) -> int:
+    """Check that every stored record parses, and report the ledger digest."""
+    from harness.ledger import mirror as mirror_mod  # noqa: PLC0415 - deferred
+
+    try:
+        records = notes_mod.read_all(root, ref=ref)
+    except notes_mod.NotesError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    source = mirror_mod.ledger_digest(root, ref=ref)
+    print(f"records : {len(records)}")
+    print(f"digest  : {source}")
+
+    if not args.dsn:
+        return 0
+
+    from harness.index.store import IndexUnavailableError, connect  # noqa: PLC0415
+
+    try:
+        conn = connect(args.dsn)
+    except IndexUnavailableError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 3
+    with conn:
+        mirror_mod.write_mirror(root, conn)
+        mirrored = mirror_mod.mirror_digest(conn)
+    if mirrored != source:
+        print(f"MISMATCH: the mirror is not identical\n  git    {source}\n  mirror {mirrored}")
+        return 1
+    print("mirror  : identical to the notes")
+    return 0
+
+
+def _emit_ledger(args: argparse.Namespace, payload: list[Any], records: list[Any]) -> None:
+    if args.json:
+        print(json.dumps(payload, indent=2, default=str))
+    elif not records:
+        print("no records")
+    else:
+        for record in records:
+            verdict = (record.verdict or {}).get("summary", "")
+            suffix = f"  [{verdict}]" if verdict else ""
+            print(
+                f"{record.at:<26} {record.commit_sha[:12]:<13} {record.work_id:<20} "
+                f"{record.session_id}{suffix}"
+            )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -879,6 +1079,55 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     p.set_defaults(func=cmd_propose)
+
+    p = sub.add_parser("ledger", help="append and read session records under git notes")
+    led_sub = p.add_subparsers(dest="ledger_command", required=True)
+
+    led_common = argparse.ArgumentParser(add_help=False)
+    led_common.add_argument("--ref", default="harness", help="notes ref (default: harness)")
+    led_common.add_argument("--json", action="store_true", help="emit JSON")
+
+    led_append = led_sub.add_parser(
+        "append", parents=[led_common], help="record one session entry against a commit"
+    )
+    led_append.add_argument("--work-id", required=True)
+    led_append.add_argument("--session-id", help="defaults to a digest of the record")
+    led_append.add_argument("--commit", default="HEAD", help="commit to attach to (default: HEAD)")
+    led_append.add_argument("--prompt-fingerprint", help="step-3 fingerprint of the prompt sent")
+    led_append.add_argument("--budget", type=int, help="prompt budget that was used")
+    led_append.add_argument("--unit", help="budget unit reported by the compiler")
+    led_append.add_argument("--proposal", help="path to a proposal JSON file")
+    led_append.add_argument(
+        "--gate", action="store_true", help="gate the proposal and record the verdict"
+    )
+    led_append.add_argument("--manifest", help="comma-separated change manifest, for the gate")
+    led_append.add_argument("--effect", choices=["not-observed", "applied", "failed", "none"])
+    led_append.add_argument(
+        "--effect-detail", default="", help="what happened, in the caller's words"
+    )
+
+    led_show = led_sub.add_parser("show", parents=[led_common], help="records for a commit")
+    led_show.add_argument("--commit", default="HEAD")
+
+    led_sub.add_parser("list", parents=[led_common], help="every record in the ledger")
+
+    led_verify = led_sub.add_parser(
+        "verify", parents=[led_common], help="check record integrity and print the ledger digest"
+    )
+    led_verify.add_argument("--dsn", help="also verify a Postgres mirror")
+
+    mirror_cmd = led_sub.add_parser(
+        "mirror", parents=[led_common], help="write the ledger into the optional Postgres mirror"
+    )
+    mirror_cmd.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+
+    led_sub.add_parser(
+        "transport",
+        parents=[led_common],
+        help="print the commands that push and fetch the notes ref",
+    )
+
+    p.set_defaults(func=cmd_ledger)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)

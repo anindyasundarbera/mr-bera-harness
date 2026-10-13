@@ -236,6 +236,15 @@ def pg_conn() -> Iterator[Any]:
         conn.close()
 
 
+@pytest.fixture
+def pg_dsn() -> str:
+    """The test DSN, or skip. A string, for tests that pass it to the CLI."""
+    dsn = os.environ.get("MRB_TEST_DSN")
+    if not dsn:
+        pytest.skip("no MRB_TEST_DSN; set it to a throwaway database to exercise the store")
+    return dsn
+
+
 @pytest.fixture(autouse=True)
 def _subprocess_coverage_env(monkeypatch: pytest.MonkeyPatch) -> None:
     start = os.environ.get("COVERAGE_PROCESS_START")

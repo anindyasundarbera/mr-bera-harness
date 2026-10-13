@@ -41,6 +41,7 @@ class TestSubcommandCoverage:
         "compile",
         "dashboard",
         "propose",
+        "ledger",
         "doctor",
     }
 

@@ -127,8 +127,9 @@ prompt with a SHA-256 fingerprint. A **usage dashboard** ships alongside, so the
 harness's behaviour in any repository can be seen, recorded and compared across
 runs. Step 4 — proposal schemas and effect gates — makes the propose/dispose split
 code: a model proposes, the harness validates against JSON Schema and the rules
-architecture §7.1 enumerates, and **nothing in that step executes**. Steps 5 and 6
-remain.
+architecture §7.1 enumerates, and **nothing in that step executes**. Step 5 records
+each session in `git notes` — so the history survives a repository copy — with an
+optional Postgres mirror derived from it. Step 6 remains.
 
 The PostgreSQL index is optional. Install the extra only if you want it:
 
@@ -151,6 +152,9 @@ harness dashboard history   # list recorded runs, newest first
 
 harness propose schema      # the proposal JSON Schema, for a provider
 harness propose gate p.json # validate a proposal and check every effect gate
+
+harness ledger append ...   # record a session entry under git notes
+harness ledger verify       # integrity, and the ledger digest
 ```
 
 `harness query` exits **3** when the index is unreachable, so "no answers" is
