@@ -40,6 +40,7 @@ class TestSubcommandCoverage:
         "query",
         "compile",
         "dashboard",
+        "propose",
         "doctor",
     }
 

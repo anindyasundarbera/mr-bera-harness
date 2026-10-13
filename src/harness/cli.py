@@ -640,6 +640,81 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     return 0 if run.get("healthy", False) else 1
 
 
+def cmd_propose(args: argparse.Namespace) -> int:
+    """Validate or gate a proposal.
+
+    **This command executes nothing.** It reads a proposal, checks it against the
+    schema and the effect gates, and reports a verdict. `permitted` means the
+    harness *may* act; it does not mean the harness acted, and no code path here
+    performs a mutation.
+
+    Exit codes: 0 permitted (or schema printed), 1 structurally invalid,
+    2 refused by a gate, 3 not checked, 4 usage error.
+    """
+    from harness.propose.gate import gate_proposal  # noqa: PLC0415
+    from harness.propose.schema import (  # noqa: PLC0415
+        PROPOSAL_SCHEMA,
+        SchemaUnavailableError,
+        validate_structure,
+    )
+
+    if args.propose_command == "schema":
+        print(json.dumps(PROPOSAL_SCHEMA, indent=2, sort_keys=True))
+        return 0
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+
+    raw = sys.stdin.read() if args.path == "-" else Path(args.path).read_text(encoding="utf-8")
+    try:
+        proposal = json.loads(raw)
+    except ValueError as exc:
+        print(f"ERROR: not valid JSON: {exc}", file=sys.stderr)
+        return 4
+
+    if args.propose_command == "validate":
+        try:
+            problems = validate_structure(proposal)
+        except SchemaUnavailableError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 4
+        if args.json:
+            print(json.dumps({"valid": not problems, "problems": problems}, indent=2))
+        elif problems:
+            for problem in problems:
+                print(f"  ! {problem}")
+        else:
+            print("valid against the proposal schema")
+        return 1 if problems else 0
+
+    manifest = [m.strip() for m in (args.manifest or "").split(",") if m.strip()] or None
+    try:
+        verdict = gate_proposal(proposal, config=config, manifest=manifest)
+    except SchemaUnavailableError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+
+    if args.json:
+        print(json.dumps(verdict.as_dict(), indent=2, default=str))
+    else:
+        for problem in verdict.structural_problems:
+            print(f"  ! structurally invalid: {problem}")
+        for item in verdict.gates:
+            print(f"  {item.verdict:<12} {item.name:<24} {item.detail}")
+        print(f"verdict: {verdict.summary()}")
+
+    if verdict.structural_problems:
+        return 1
+    if verdict.refusals:
+        return 2
+    if verdict.unchecked:
+        return 3
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -785,6 +860,25 @@ def build_parser() -> argparse.ArgumentParser:
     history_cmd.add_argument("--json", action="store_true", help="emit JSON")
 
     p.set_defaults(func=cmd_dashboard)
+
+    p = sub.add_parser("propose", help="validate or gate a proposal (never executes it)")
+    prop_sub = p.add_subparsers(dest="propose_command", required=True)
+
+    prop_sub.add_parser("schema", help="print the proposal JSON Schema")
+
+    val = prop_sub.add_parser("validate", help="check a proposal against the schema")
+    val.add_argument("path", help="path to a proposal JSON file, or - for stdin")
+    val.add_argument("--json", action="store_true", help="emit the verdict as JSON")
+
+    gate = prop_sub.add_parser("gate", help="validate a proposal and check every effect gate")
+    gate.add_argument("path", help="path to a proposal JSON file, or - for stdin")
+    gate.add_argument("--json", action="store_true", help="emit the verdict as JSON")
+    gate.add_argument(
+        "--manifest",
+        help="comma-separated change manifest; omit if the session declared none",
+    )
+
+    p.set_defaults(func=cmd_propose)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)
