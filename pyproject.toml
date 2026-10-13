@@ -14,6 +14,10 @@ license = "LicenseRef-Proprietary"
 dependencies = ["PyYAML>=6.0"]
 
 [project.optional-dependencies]
+# Proposals are validated against JSON Schema (architecture section 10.1). The
+# standard implementation, not a hand-rolled subset: a second definition of
+# validity would be a subtly different contract.
+propose = ["jsonschema>=4.20"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -71,5 +75,5 @@ warn_unreachable = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["yaml.*", "psycopg.*"]
+module = ["yaml.*", "psycopg.*", "jsonschema.*"]
 ignore_missing_imports = true

@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-012` | 2026-10-13 | The gates validate against JSON Schema via the standard library, and may not execute | Accepted | — |
 | `ADR-2026-011` | 2026-10-13 | The usage dashboard is a static viewer, not a live actor | Accepted | — |
 | `ADR-2026-010` | 2026-10-13 | Prompt budgets are exact word counts, and the budget is caller-supplied | Accepted | — |
 | `ADR-2026-009` | 2026-10-13 | Scope fields are indexed element-wise so a scope query cannot over-select | Accepted | — |

@@ -125,7 +125,10 @@ they never reach a model. Step 3 — the prompt compiler — turns a work item a
 budget into a deterministic prompt with a SHA-256 fingerprint. Step 3 — the prompt compiler — turns a work item and a budget into a deterministic
 prompt with a SHA-256 fingerprint. A **usage dashboard** ships alongside, so the
 harness's behaviour in any repository can be seen, recorded and compared across
-runs. Steps 4–6 of the build order remain.
+runs. Step 4 — proposal schemas and effect gates — makes the propose/dispose split
+code: a model proposes, the harness validates against JSON Schema and the rules
+architecture §7.1 enumerates, and **nothing in that step executes**. Steps 5 and 6
+remain.
 
 The PostgreSQL index is optional. Install the extra only if you want it:
 
@@ -145,6 +148,9 @@ harness compile MRB-M06-S01 --budget 4000     # prompt + fingerprint
 
 harness dashboard run       # run the checks, record the run, write .harness/usage.html
 harness dashboard history   # list recorded runs, newest first
+
+harness propose schema      # the proposal JSON Schema, for a provider
+harness propose gate p.json # validate a proposal and check every effect gate
 ```
 
 `harness query` exits **3** when the index is unreachable, so "no answers" is
