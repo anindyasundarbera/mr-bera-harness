@@ -515,6 +515,54 @@ def _print_lines(values: list[str]) -> None:
         print(value)
 
 
+def cmd_compile(args: argparse.Namespace) -> int:
+    """Compile a bounded prompt, and print its fingerprint.
+
+    The prompt goes to stdout; the fingerprint goes to stderr, so a caller can
+    capture one without the other. The fingerprint is the audit handle: it is
+    recorded *before* the model is called, which is what makes a session
+    reproducible.
+    """
+    from harness.compile.prompt import (  # noqa: PLC0415 - deferred so --help stays fast
+        EXIT_OK,
+        CompileError,
+        compile_prompt,
+    )
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    defining = [s for s in (args.defining or "").split(",") if s]
+    try:
+        compiled = compile_prompt(
+            config,
+            args.work_id,
+            budget=args.budget,
+            rev=args.rev,
+            defining=defining,
+        )
+    except CompileError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return exc.exit_code
+
+    if args.json:
+        print(json.dumps(compiled.as_dict(), indent=2, default=str))
+    elif args.manifest:
+        print(json.dumps(compiled.manifest(), indent=2, default=str))
+    else:
+        print(compiled.text, end="")
+    print(
+        f"fingerprint {compiled.fingerprint}  "
+        f"({compiled.used}/{compiled.budget} {compiled.unit}s, "
+        f"{len(compiled.entries)} document(s), {compiled.commit_sha[:12]})",
+        file=sys.stderr,
+    )
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -621,6 +669,20 @@ def build_parser() -> argparse.ArgumentParser:
     gap.add_argument("--state", help="filter by gap state")
 
     p.set_defaults(func=cmd_query)
+
+    p = sub.add_parser("compile", help="compile a bounded prompt for a work item")
+    p.add_argument("work_id")
+    p.add_argument(
+        "--budget",
+        type=int,
+        required=True,
+        help="maximum prompt size, in words (required: no default value is decided)",
+    )
+    p.add_argument("--rev", default="HEAD", help="git revision to compile from (default: HEAD)")
+    p.add_argument("--defining", help="comma-separated state keys you intend to define")
+    p.add_argument("--json", action="store_true", help="emit JSON instead of the prompt")
+    p.add_argument("--manifest", action="store_true", help="emit the audit manifest only")
+    p.set_defaults(func=cmd_compile)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)
