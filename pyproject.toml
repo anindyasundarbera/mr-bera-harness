@@ -4,7 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mr-bera-harness"
-version = "0.1.0"
+# Single-sourced from the code. The version used to be written here *and* in
+# `src/harness/__init__.py`, so the two could disagree — and a package that
+# reports a version other than the one it was built from is worse than one that
+# reports none. The code is the source because it is what a running harness can
+# report about itself; `--version` and the dashboard provenance both read it.
+dynamic = ["version"]
 description = "Deterministic session harness: the LLM proposes, the harness disposes"
 readme = "README.md"
 # tomllib is stdlib from 3.11. The harness is new and has no 3.10 consumers, so
@@ -34,6 +39,11 @@ harness = "harness.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+
+[tool.setuptools.dynamic]
+# Read the version from the package itself, so there is exactly one place to
+# change it and no way for the two to drift.
+version = { attr = "harness.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

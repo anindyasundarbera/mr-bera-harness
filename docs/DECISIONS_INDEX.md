@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-022` | 2026-10-13 | The package version is declared once, in the code | Accepted | — |
 | `ADR-2026-021` | 2026-10-13 | Session continuity needs capture before it can offer resume, and the harness cannot read a transcript | Proposed | — |
 | `ADR-2026-020` | 2026-10-13 | The handoff's mechanical facts are generated, and its narrative is not | Accepted | — |
 | `ADR-2026-019` | 2026-10-13 | A code-to-decision link carries the decision's anchor hash, and is declared never inferred | Accepted | `ADR-2026-017` |
