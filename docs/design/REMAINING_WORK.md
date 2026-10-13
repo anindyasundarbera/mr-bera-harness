@@ -100,9 +100,54 @@ Each is `DecisionRequired`. None may be supplied by a plausible default.
 | 3 | **Entry location** — `docs/DECISIONS_INDEX.md` says entries live in `knowledge/decisions/`, but `harness.toml` sets `decisions = "docs/decisions"` | the generated header contradicts the configuration; entries were placed per the config and the header text left unchanged | open |
 | 4 | **`workflow` scope for agent sessions** | a token without it cannot push `.github/workflows/**`; SSH works but is a workaround | open |
 | 5 | **Postgres locality / index lifecycle** | §10 options 1–2; step 1 chose rebuild-on-demand implicitly by having no long-running service | `HARNESS_ARCHITECTURE.md` §10 |
+| 6 | **`harness ci` has no consumer pipeline** | invoked in a repository other than the harness it runs the *harness's own* stages — wheel build, `mypy src`, `pytest tests/` — and fails with a misleading message. See §6.1 | open |
+
+### 5.1 A consumer test found what the unit tests could not
+
+A throwaway consumer repository was built to share nothing with `mr_bera` — a
+`TASK` prefix with grammar `P/T`, widths `3,4`, bundle at `kb/`, docs at
+`specs/`. Every command was exercised against it. Steps 1–3 passed in full: the
+config layer, the resolver's `0/2/3/4` contract, `index verify` rebuilding
+identically before and after a commit, all nine queries, all compile paths
+including the `3` and `5` refusals, and `entries generate` writing into the
+consumer with the harness repository left untouched.
+
+It also found the defect in decision 6 above, which no unit test could have: the
+tests run *inside* the harness repository, where the harness's own pipeline is
+correct.
 
 ## 6. Housekeeping and environment traps
 
+### 6.1 `harness ci` is not project-agnostic
+
+`harness ci` runs the harness's own pipeline wherever it is invoked — wheel build,
+`mypy src`, the `selfcheck` stages — so in a consumer it fails with a message that
+implies the consumer is broken:
+
+```
+$ harness ci      # in a consumer
+  FAIL  wheel build        Directory '.' is not installable ... no pyproject.toml
+  FAIL  pytest             file or directory not found: tests/
+  FAIL  okf conformance    no harness.toml in .../src/harness
+RESULT: FAILED — package, typecheck, test, selfcheck
+```
+
+This is the same class as the four location defects already fixed: the library
+answering a question about its own context rather than its caller's. It also
+contradicts `ci/rehearse.py`'s own docstring ("A consumer defines its own
+`Pipeline` directly; this default exists only so the harness can dogfood itself"),
+so today the documented consumer behaviour does not exist.
+
+It is left unfixed on purpose: the correct behaviour is a decision, not a
+correction. Either the command errors clearly when no pipeline is configured for
+the project, or `harness.toml` gains a way to declare one. Both are reasonable and
+the choice has consequences for the config schema.
+
+Impact is bounded: CI runs `ci.yml`, not `harness ci`, and no shipped capability
+depends on it. Everything below was observed in a fresh consumer repository —
+see §5.1.
+
+### 6.2 Traps already paid for
 Recorded because each has already cost time:
 
 - **Four merged remote branches** remain on GitHub (`feat/extraction-index`,
@@ -147,3 +192,4 @@ refuses `main`, tests green, coverage above the 80% floor, `harness ci` passed.
 | Version | Date | Change |
 |---|---|---|
 | v1.0 | 2026-10-13 | Recorded the build-order state after steps 1–3, the step 4–6 contract, five open decisions and the environment traps. |
+| v1.1 | 2026-10-13 | Added decision 6 (`harness ci` is not project-agnostic) and §5.1, the fresh-consumer test result that found it. |
