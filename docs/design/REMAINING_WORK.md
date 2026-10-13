@@ -23,8 +23,19 @@ read-budget: must-read
 ## 1. Where the build order stands
 
 `HARNESS_ARCHITECTURE.md` §9 lists six components. **All six are implemented and
-merged, and `main` is green.** Three further capabilities were built beyond the build
+merged, and `main` is green.** A further six capabilities were built beyond the build
 order, because each closed a gap the project had recorded against itself.
+
+<!-- harness:handoff-facts:start -->
+| Fact | Value |
+|---|---|
+| Derived by | `mr-bera-harness 0.1.0`, via `tools/refresh_handoff.py` |
+| OKF concepts | 21 |
+| Entries | 41 (0 problem(s)) |
+| Test modules | 23 |
+| Provenance declarations | 2 |
+| Commit types accepted | 11 |
+<!-- harness:handoff-facts:end -->
 
 | # | Component | State | Landed |
 |---|---|---|---|
@@ -43,6 +54,8 @@ Beyond the build order:
 | Runtime dependency audit | **Done** | PR #11 → `CHG-2026-015` |
 | Purpose and framing | **Done** | PR #13 → `CHG-2026-017`, `docs/PURPOSE.md` |
 | Code provenance | **Done** | PR #15 → `ADR-2026-019`, `CHG-2026-019` |
+| README staleness | **Done** | PR #17 → `CHG-2026-020` |
+| Generated handoff facts | **Done** | `ADR-2026-020`, `CHG-2026-021` |
 
 What each build-order step provides:
 
@@ -73,6 +86,7 @@ than a summary here, which would be a second copy to keep in step. The map:
 | Runtime dependencies | `RUNTIME_DEPENDENCIES.md` | `CHG-2026-015` |
 | Code provenance | `CODE_PROVENANCE.md` | `ADR-2026-019` |
 | Purpose and framing | `PURPOSE.md` | `CHG-2026-017` |
+| Generated handoff facts | `REMAINING_WORK.md` §1 (marked region) | `ADR-2026-020` |
 
 ## 3. What remains, and what is genuinely undecided
 
@@ -209,14 +223,71 @@ harness provenance check                        # code -> decision links verify
 python -m pytest -q                             # without a database
 python -m pytest -q                             # with MRB_TEST_DSN set
 harness ci --workflow .github/workflows/ci.yml  # rehearsal + parity
+python tools/refresh_handoff.py --check         # is this document current?
 ```
 
 Expected on `main`: `doctor` **clean**, `guards` **fails on `main` by design**,
 `provenance check` exit 0, tests green, coverage above the 80% floor, `harness ci`
-**PASSED**.
+**PASSED**, `refresh_handoff.py --check` exit **0**.
 
 **`MRB_TEST_DSN` must be a throwaway database.** The fixtures call `reset`, which
 drops tables; a fallback to `MRB_HARNESS_DSN` once destroyed a real index.
+
+### 6.1 The handoff's own facts are generated
+
+`tools/refresh_handoff.py` rewrites **only** the region between the
+`<!-- harness:handoff-facts:start -->` and `<!-- harness:handoff-facts:end -->` markers
+in §1, deriving every value through the harness's own library rather than restating it
+(`ADR-2026-020`). Everything outside the markers is a human edit and is never touched.
+
+| Invocation | Contract |
+|---|---|
+| `python tools/refresh_handoff.py` | refresh the region; `0` |
+| `python tools/refresh_handoff.py --check` | `0` current · `1` **stale** · `2` no markers |
+
+The region holds **only facts that are functions of the committed content**. Two
+categories are deliberately excluded, each with a failure attached:
+
+- **The revision and the dirty flag.** A committed file cannot contain its own commit's
+  hash, so a region naming `HEAD` would be stale the instant it was committed and
+  `--check` could never return `0`. A handoff that names a revision must write it by
+  hand — which is honest, because it is then visibly a claim a person made.
+- **The test pass and skip counts.** They describe the *environment*: this same commit
+  reports a different pair with and without `MRB_TEST_DSN`, so generating them would
+  make `--check` flap between a laptop and CI. Test results live in the changelog entry,
+  with their provenance.
+
+**Automatic cleanup.** A scheduled session (see §6.2) runs `--check` and, when it exits
+`1`, refreshes the region, re-reads the narrative around it, and — if a fact has moved
+in a way that changes the story — updates the prose and opens a draft PR. The schedule
+is a maintenance trigger, not an authority: nothing it produces is merged without a human.
+
+**Stated limit, because a generated region invites over-trust:** the script proves the
+region matches the repository's derivations. It cannot prove the narrative above it is
+true — the v1.0 staleness was prose, and no marker catches prose.
+
+### 6.2 The scheduled handoff refresh
+
+Configured as an agent automation on the Local Agent Host, **not** in CI: CI validates a
+candidate, whereas this repairs a document, and the two are different questions
+(`ADR-2026-008` makes the same distinction for the guards).
+
+| Where | Value |
+|---|---|
+| Automation | `Handoff fact refresh (automatic cleanup)` |
+| Host | Local Agent Host (VS Code agent automations) |
+| Schedule | weekly, Monday 09:00 local |
+| Target | this repository, isolated in a worktree off `main` |
+
+Its prompt instructs the session to branch from `main`, run `--check`, refresh and
+verify on exit `1`, correct only narrative the repository can justify, and open a
+**draft** PR. It is configured on the host rather than stored in this repository, so it
+is not reviewable here — the script it runs, and the contract above, are.
+
+An automation is a **trigger**, not a permission: it inherits the branch rules, it cannot
+merge, and a human reviews its PR like any other. If the host is unavailable the
+mechanism degrades to the manual command in §6.1, which is why the script is the
+load-bearing part and the schedule is only the convenience.
 
 ## 7. Change history
 
@@ -228,3 +299,4 @@ drops tables; a fallback to `MRB_HARNESS_DSN` once destroyed a real index.
 | v1.3 | 2026-10-13 | Closed the blocker list: two mechanical defects fixed, four status-quo ADRs (`014`–`016`) recorded. |
 | v1.4 | 2026-10-13 | Recorded §5.2: the dashboard's guard check inspects the live repository, making one test environment-dependent. |
 | v2.0 | 2026-10-13 | **All six build-order steps are done.** Replaced the historical §2–§4 with a map to each step's design note and decision, refreshed the decision table (entry-location closed; two new items), and corrected the verification section. |
+| v2.1 | 2026-10-13 | §1's facts are now **generated** (`ADR-2026-020`), so the counts cannot decay; added README-staleness and generated-handoff-facts to the beyond-the-build-order table, and §6.1–§6.2 for the refresher and its scheduled run. |
