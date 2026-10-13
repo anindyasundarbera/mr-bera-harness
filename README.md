@@ -145,9 +145,10 @@ implemented and merged: extraction and a derived index that rebuilds identically
 from git; a query API that answers lookups in SQL; a prompt compiler whose
 fingerprint binds exactly what was sent; proposal schemas and effect gates that
 enforce the rules the architecture enumerates and execute nothing; and a session
-ledger in `git notes` that survives a repository copy. A **usage dashboard** ships
-alongside. **Step 6 — instruction→prompt — is not built**, and the architecture says
-nothing may depend on it.
+ledger in `git notes` that survives a repository copy. **Step 6 — instruction→prompt
+— resolves a human instruction to a work item, and asks instead of guessing** when the
+answer is not unique. A **usage dashboard** ships alongside. All six build-order
+components are implemented.
 
 **What this repository is for, and how much of it is true today, is stated plainly
 in [docs/PURPOSE.md](docs/PURPOSE.md)** — including the gap it does not yet close.
@@ -176,6 +177,8 @@ harness propose gate p.json # validate a proposal and check every effect gate
 
 harness ledger append ...   # record a session entry under git notes
 harness ledger verify       # integrity, and the ledger digest
+
+harness intent resolve "work on MRB-M06-S07"   # instruction -> work item, or a question
 ```
 
 `harness query` exits **3** when the index is unreachable, so "no answers" is
