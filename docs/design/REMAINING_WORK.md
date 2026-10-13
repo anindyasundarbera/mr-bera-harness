@@ -44,6 +44,16 @@ What each completed step provides:
 
 ## 2. What is next: step 4 — proposal schemas + effect gates
 
+> **Status: PARKED (owner instruction, 2026-10-13). Do not start this.**
+>
+> The owner asked for step 4 to be parked and to await an explicit request. An
+> agent must not begin it, speculatively prepare it, or prepare a branch for it.
+> This section exists so the next session knows the step is next **and** that
+> starting it now would be a violation, not a judgement call.
+>
+> Everything already decided about it is recorded below, so the eventual session
+> does not have to re-derive the contract — only to build against it.
+
 The first step rated **Medium** risk, because it defines what a model may propose
 and how a proposal is checked before anything executes. Everything so far is pure
 code with no model in the loop; step 4 introduces the loop's contract.
@@ -193,3 +203,4 @@ refuses `main`, tests green, coverage above the 80% floor, `harness ci` passed.
 |---|---|---|
 | v1.0 | 2026-10-13 | Recorded the build-order state after steps 1–3, the step 4–6 contract, five open decisions and the environment traps. |
 | v1.1 | 2026-10-13 | Added decision 6 (`harness ci` is not project-agnostic) and §5.1, the fresh-consumer test result that found it. |
+| v1.2 | 2026-10-13 | Marked step 4 **parked** by owner instruction: do not start it without an explicit request. Steps 4–6 unchanged otherwise. |
