@@ -62,6 +62,7 @@ harness describe              # show the resolved configuration
 harness context <WORK-ID>     # the documents that bind a work item
 harness conform               # OKF v0.2 conformance of the knowledge bundle
 harness query documents       # look things up in the index, not in files
+harness compile <WORK-ID> --budget 4000   # compile a bounded prompt + fingerprint
 harness index verify          # drop the index, rebuild from git, require identity
 harness doctor                # end-to-end health summary
 ```
@@ -116,11 +117,12 @@ if result.must_stop:
 `v0.1.0`. The deterministic layers — OKF reading, routing, entry validation,
 local CI rehearsal, session guards — are implemented and tested.
 
-Build-order steps 1 and 2 are implemented. Step 1 — extraction and index —
-parses committed git bytes into a normalized model, loads it into a derived
-PostgreSQL index, and proves rebuild-identity by dropping the database and
-rebuilding from git (`harness index verify`). Step 2 — the query API — answers
-lookups in SQL so they never reach a model. Steps 3–6 remain.
+Build-order steps 1–3 are implemented. Step 1 — extraction and index — parses
+committed git bytes into a normalized model, loads it into a derived PostgreSQL
+index, and proves rebuild-identity by dropping the database and rebuilding from
+git (`harness index verify`). Step 2 — the query API — answers lookups in SQL so
+they never reach a model. Step 3 — the prompt compiler — turns a work item and a
+budget into a deterministic prompt with a SHA-256 fingerprint. Steps 4–6 remain.
 
 The PostgreSQL index is optional. Install the extra only if you want it:
 
@@ -135,10 +137,13 @@ harness index status    # what the index currently holds
 harness query touching MRB-M06-S07      # which documents cover this scope?
 harness query blocked  MRB-M06-S07      # is this blocked?
 harness query stops    --state BlockedOwner   # what is blocked, and by what?
+
+harness compile MRB-M06-S01 --budget 4000     # prompt + fingerprint
 ```
 
 `harness query` exits **3** when the index is unreachable, so "no answers" is
-never confused with "no DSN".
+never confused with "no DSN". `harness compile` exits `3` blocked, `4` uncovered,
+`5` over budget, `2` usage — and never emits a silently-truncated prompt.
 
 ## Licence
 

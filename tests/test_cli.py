@@ -38,6 +38,7 @@ class TestSubcommandCoverage:
         "ci",
         "index",
         "query",
+        "compile",
         "doctor",
     }
 
@@ -332,6 +333,78 @@ class TestQueryCommandsReachTheEngine:
 
     def test_gaps_runs(self, indexed: Path) -> None:
         assert main(["query", "gaps"]) == 0
+
+
+class TestCompile:
+    """`harness compile` must print the prompt and its fingerprint, and refuse
+    rather than emit a partial one. Exit codes are the contract.
+
+    These need a *covered* work item, so they use the committed consumer project
+    (`git_project`) rather than the empty one `project` builds.
+    """
+
+    def test_compile_requires_a_budget(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(git_project)
+        with pytest.raises(SystemExit):
+            main(["compile", "MRB-M06"])
+
+    def test_bad_identifier_is_two(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A malformed identifier is a usage error, not an uncaught exception."""
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "NOT-AN-ID", "--budget", "1000"]) == 2
+
+    def test_zero_budget_is_two(self, git_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M06", "--budget", "0"]) == 2
+
+    def test_uncovered_chain_is_four(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M99", "--budget", "1000"]) == 4
+
+    def test_tiny_budget_is_five(self, git_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Over budget has its own code, distinct from a usage error."""
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M06", "--budget", "1"]) == 5
+
+    def test_blocked_item_is_three(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M06-S07", "--budget", "100000"]) == 3
+
+    def test_compiles_and_prints_the_fingerprint_on_stderr(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M06", "--budget", "100000"]) == 0
+        captured = capsys.readouterr()
+        assert "MRB-M06" in captured.out
+        assert "fingerprint" in captured.err
+
+    def test_json_carries_text_and_fingerprint(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M06", "--budget", "100000", "--json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["fingerprint"]
+        assert payload["text"]
+        assert payload["unit"] == "word"
+
+    def test_manifest_omits_the_text(
+        self, git_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.chdir(git_project)
+        assert main(["compile", "MRB-M06", "--budget", "100000", "--manifest"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert "text" not in payload
+        assert payload["fingerprint"]
 
 
 class TestIndex:
