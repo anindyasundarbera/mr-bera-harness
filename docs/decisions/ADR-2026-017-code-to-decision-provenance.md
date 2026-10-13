@@ -3,8 +3,8 @@ type: Decision Record
 id: ADR-2026-017
 date: 2026-10-13
 title: Propose linking source code to the decisions that produced it
-status: Proposed
-decision: Propose that a source file may declare the decision records that bind it, checked by CI so the link cannot rot, so a reader can move from a line of code to why it is that way; the mechanism is undecided and nothing is implemented.
+status: Superseded
+decision: Proposed that a source file may declare the decision records that bind it, checked by CI so the link cannot rot, so a reader can move from a line of code to why it is that way; the mechanism was left undecided and, in this record, unimplemented. Superseded by ADR-2026-019, which implemented the capability and settled the mechanism.
 covers: [MRB]
 supersedes: []
 ---
@@ -38,8 +38,10 @@ Two constraints shape what a fix could be:
 
 # Decision
 
-**Status: `Proposed`. Nothing here is implemented, and it must not be read as though
-it were.**
+**Status: `Superseded` by `ADR-2026-019`.** This record proposed the capability and
+left the mechanism undecided; at the time it was written, nothing was implemented. The
+body below is preserved as the proposal was made — read it as history, not as the
+current instruction. `ADR-2026-019` settled the mechanism and implemented it.
 
 The proposal is that a source file may **declare** the decisions that bind it — a
 small, machine-readable declaration, not a comment — and that CI **checks** each
@@ -64,13 +66,17 @@ be unrelated to it. Any implementation must state what it does and does not veri
 
 # Consequences of leaving it open
 
-- **Recorded, so the purpose statement does not overclaim.** `docs/PURPOSE.md` names
+- **Recorded, so the purpose statement does not overclaim.** `docs/PURPOSE.md` named
   this as the principal gap, which is more honest than describing the repository as
   self-explaining.
 - **Recorded, so the next session does not reinvent the framing** — or worse, claim
   the capability already exists because the documents are good.
 - Cost: until it is built, moving from code to reasoning remains a search rather than
   a step. That is the current, known limitation.
+
+*Superseded:* the gap this section describes was closed by `ADR-2026-019`. The cost
+above was real for the interval between this record and that one; it is not the state
+today.
 
 # Alternatives rejected
 
