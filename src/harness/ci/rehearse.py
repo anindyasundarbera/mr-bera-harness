@@ -31,8 +31,21 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+
+def repo_root(root: Path | None = None) -> Path:
+    """The repository the command was invoked in, not the package's own location.
+
+    This was `Path(__file__).resolve().parent.parent`, which resolves to the
+    *installed package* directory (`.../src/harness`). Every stage then ran
+    there, so the wheel build could not find `pyproject.toml`, pytest could not
+    find `tests/`, and the self-check could not find `harness.toml` — eight of
+    twelve steps failed while the parity check still reported success. The
+    invoking directory is the only correct answer, matching `guards/session.py`
+    and `entries/commits.py`.
+    """
+    return (root or Path.cwd()).resolve()
+
+
 PY = sys.executable
 
 
@@ -72,6 +85,11 @@ class Step:
     label: str
     argv: list[str]
     requires: tuple[str, ...] = ()
+    #: Exit codes that mean the step succeeded. Defaults to `(0,)`, but a
+    #: deliberate non-zero result is also a passing check: `harness context`
+    #: exits 3 (a blocker applies) or 4 (nothing covers the chain) *by design*,
+    #: so a rehearsal that insisted on 0 could not assert that contract.
+    ok_exit_codes: tuple[int, ...] = (0,)
 
 
 @dataclass
@@ -120,8 +138,8 @@ def stages() -> list[Stage]:
         ),
         Stage(
             name="typecheck",
-            description="mypy --strict over tools/",
-            steps=[Step("mypy --strict", [PY, "-m", "mypy", "tools"], requires=("mypy",))],
+            description="mypy --strict over the package (matches CI's `mypy src`)",
+            steps=[Step("mypy --strict", [PY, "-m", "mypy", "src"], requires=("mypy",))],
             parity_note=(
                 "CI uses the interpreter from its own setup-python step; this run "
                 "uses the local one. Version skew is possible but rare."
@@ -139,9 +157,16 @@ def stages() -> list[Stage]:
                 Step("okf conformance", [PY, "-m", "harness.cli", "conform"]),
                 Step("routing invariants", [PY, "-m", "harness.cli", "doctor"]),
                 Step("entry schema", [PY, "-m", "harness.cli", "doctor"]),
-                Step("branch not stacked", [PY, "tools/activate_guards.py", "--json"]),
-                Step("generated indexes current", [PY, "tools/entries.py", "generate", "--check"]),
-                Step("resolver exit contract", [PY, "-m", "harness.cli", "conform"]),
+                Step("branch not stacked", [PY, "-m", "harness.cli", "guards", "--json"]),
+                Step(
+                    "generated indexes current",
+                    [PY, "-m", "harness.cli", "entries", "generate", "--check"],
+                ),
+                Step(
+                    "resolver exit contract",
+                    [PY, "-m", "harness.cli", "context", "MRB-M02"],
+                    ok_exit_codes=(0, 3, 4),
+                ),
                 Step(
                     "commit convention",
                     [PY, "-m", "pytest", "tests/", "-q", "--no-header"],
@@ -190,8 +215,9 @@ def tool_available(name: str) -> bool:  # noqa: ARG001
     return shutil.which(name) is not None
 
 
-def run_stage(stage: Stage) -> tuple[bool, list[str]]:
-    """Run one stage. Returns (passed, messages)."""
+def run_stage(stage: Stage, root: Path | None = None) -> tuple[bool, list[str]]:
+    """Run one stage in the invoking repository. Returns (passed, messages)."""
+    cwd = repo_root(root)
     messages: list[str] = []
     passed = True
     for step in stage.steps:
@@ -206,15 +232,15 @@ def run_stage(stage: Stage) -> tuple[bool, list[str]]:
             started = time.monotonic()
             proc = subprocess.run(  # noqa: S603
                 step.argv,
-                cwd=REPO_ROOT,
+                cwd=cwd,
                 capture_output=True,
                 text=True,
                 check=False,
                 env={**os.environ, "PYTHONWARNINGS": "error"},
             )
             elapsed = time.monotonic() - started
-            if proc.returncode == 0:
-                messages.append(f"  PASS  {step.label}  ({elapsed:.2f}s)")
+            if proc.returncode in step.ok_exit_codes:
+                messages.append(f"  PASS  {step.label}  (exit {proc.returncode}, {elapsed:.2f}s)")
             else:
                 passed = False
                 messages.append(f"  FAIL  {step.label}  (exit {proc.returncode})")
@@ -225,25 +251,16 @@ def run_stage(stage: Stage) -> tuple[bool, list[str]]:
     return passed, messages
 
 
-def check_parity() -> tuple[bool, list[str]]:
+def check_parity(workflow: Path | None = None, root: Path | None = None) -> tuple[bool, list[str]]:
     """Compare this runner's stages against the workflow's job names."""
+    root = repo_root(root)
+    workflow = workflow if workflow is not None else root / ".github" / "workflows" / "ci.yml"
     messages: list[str] = []
-    if not WORKFLOW.exists():
-        return False, [f"workflow not found: {WORKFLOW}"]
+    if not workflow.exists():
+        return False, [f"workflow not found: {workflow}"]
 
-    # Only read the `jobs:` block. The `on:`, `env:` and `permissions:` blocks use
-    # the same indentation, so a naive scan would report triggers as jobs.
-    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
-    in_jobs = False
-    ci_jobs: list[str] = []
-    for line in lines:
-        if line.startswith("jobs:"):
-            in_jobs = True
-            continue
-        if in_jobs and line and not line.startswith(" "):
-            break  # left the jobs block
-        if in_jobs and re.match(r"^  [A-Za-z0-9_-]+:\s*$", line):
-            ci_jobs.append(line.strip().rstrip(":"))
+    # Job names come from `workflow_jobs`, which reads only the `jobs:` block.
+    ci_jobs = workflow_jobs(workflow)
 
     local_stages = [s.name for s in stages()]
 
