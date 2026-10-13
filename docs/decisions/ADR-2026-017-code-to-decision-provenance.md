@@ -29,9 +29,9 @@ Two constraints shape what a fix could be:
 
 - **It must not be prose.** A comment saying "see ADR-012" rots silently the moment
   the ADR is superseded. Anything added must be *checkable*. This repository has
-  already been bitten once by a hardcoded claim about location that became false
-  without failing anything; the fix was to read the location from configuration
-  rather than state it. The same test applies here.
+  already been bitten once by a hardcoded claim that became false without failing
+  anything (`CHG-2026-016` fixed exactly that in the generated header); the same test
+  applies here.
 - **It must not invent provenance.** Inferring a link from filenames, commit messages
   or an embedding would produce a plausible but unverified association, which is the
   failure mode this repository exists to prevent.

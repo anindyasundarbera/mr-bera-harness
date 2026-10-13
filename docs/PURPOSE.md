@@ -87,7 +87,7 @@ is meant to fix.
 - **Instruction → prompt (build-order step 6) is not built**, and the architecture
   says nothing may depend on it: a human typing a work item ID loses nothing.
 - **`harness ci` is not project-agnostic** in a consuming repository: it runs the
-  harness's own pipeline rather than the consumer's. Recorded as a proposed defect.
+  harness's own pipeline rather than the consumer's (`ADR-2026-016`, `Proposed`). Recorded as a proposed defect.
 
 ## 5. What the repository is not claiming
 
