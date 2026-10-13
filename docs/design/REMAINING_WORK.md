@@ -30,8 +30,8 @@ order, because each closed a gap the project had recorded against itself.
 | Fact | Value |
 |---|---|
 | Derived by | `mr-bera-harness 0.1.0`, via `tools/refresh_handoff.py` |
-| OKF concepts | 22 |
-| Entries | 42 (0 problem(s)) |
+| OKF concepts | 23 |
+| Entries | 44 (0 problem(s)) |
 | Test modules | 23 |
 | Provenance declarations | 2 |
 | Commit types accepted | 11 |
@@ -56,6 +56,7 @@ Beyond the build order:
 | Code provenance | **Done** | PR #15 → `ADR-2026-019`, `CHG-2026-019` |
 | README staleness | **Done** | PR #17 → `CHG-2026-020` |
 | Generated handoff facts | **Done** | `ADR-2026-020`, `CHG-2026-021` |
+| Session continuity (capture + resume) | **Proposed** — design only | `ADR-2026-021`, `CHG-2026-022` |
 
 What each build-order step provides:
 
@@ -87,6 +88,7 @@ than a summary here, which would be a second copy to keep in step. The map:
 | Code provenance | `CODE_PROVENANCE.md` | `ADR-2026-019` |
 | Purpose and framing | `PURPOSE.md` | `CHG-2026-017` |
 | Generated handoff facts | `REMAINING_WORK.md` §1 (marked region) | `ADR-2026-020` |
+| Session continuity | `ADR-2026-021` (design only; no note yet) | `ADR-2026-021` |
 
 ## 3. What remains, and what is genuinely undecided
 
@@ -109,6 +111,8 @@ Each is `DecisionRequired`. None may be supplied by a plausible default.
 | 6 | **`harness ci` has no consumer pipeline** | **`Proposed`, not fixed**: in a consumer it runs the harness's own stages and misdiagnoses the consumer as broken. Refuse clearly vs make it configurable. See §5.1 | `ADR-2026-016` |
 | 7 | ~~`ADR-2026-017` status~~ | **CLOSED** — 017 was `Proposed` while `ADR-2026-019` implemented it. Resolved by supersession: 019 records `supersedes: [ADR-2026-017]` and 017 is `Superseded`, so 017 keeps the proposal it made and the current instruction is unambiguous | `ADR-2026-019` |
 | 8 | **`harness dashboard run` guard scope** | the guard check inspects the *live repository* regardless of the `branch` argument, so it can report a failure the caller never asked about — and one test is environment-dependent as a result. See §5.2 | open |
+| 9 | **How a session boundary is detected** | `ADR-2026-021` records that capture must land before resume, but *when* a session starts and ends is unspecified, so no record can be bound to one | `ADR-2026-021` |
+| 10 | **Which ledger fields a session-level record needs** | the current record is per work item (prompt/proposal/verdict/effect); nothing names a commit range or an outcome, so a session record has no defined shape | `ADR-2026-021` |
 
 ### 4.1 A consumer test found what the unit tests could not
 
@@ -168,7 +172,12 @@ Two consequences, both observed:
   *working copy* is behind `main` — a fact unrelated to the branch being asked about.
 - The test `test_guards_on_a_feature_branch_pass` therefore depends on the state of
   the repository it runs in. It passed only because the checkout was clean at the
-  time; an uncommitted merge made it fail.
+  time; an uncommitted merge made it fail. **Reproduced deterministically** on
+  2026-10-13: while merging `origin/main` into a branch with the conflict resolved but
+  **not yet committed**, `merge-base HEAD origin/main` was the *pre-merge* tip, the
+  guard reported `fail`, and the test failed — then passed unchanged the moment the
+  merge commit was created. Nothing in the branch or the test changed; only the
+  checkout's position did.
 
 Not fixed here because the fix is a semantics question, not a typo: either
 `guard_base_branch_is_default` must accept the branch and the base to compare, or
@@ -297,4 +306,5 @@ load-bearing part and the schedule is only the convenience.
 | v1.4 | 2026-10-13 | Recorded §5.2: the dashboard's guard check inspects the live repository, making one test environment-dependent. |
 | v2.0 | 2026-10-13 | **All six build-order steps are done.** Replaced the historical §2–§4 with a map to each step's design note and decision, refreshed the decision table (entry-location closed; two new items), and corrected the verification section. |
 | v2.1 | 2026-10-13 | §1's facts are now **generated** (`ADR-2026-020`), so the counts cannot decay; added README-staleness and generated-handoff-facts to the beyond-the-build-order table, and §6.1–§6.2 for the refresher and its scheduled run. |
-| v2.2 | 2026-10-13 | Closed decision 7: `ADR-2026-017` is `Superseded` by `ADR-2026-019` (which implemented it), and the hand-written `docs/decisions/index.md` no longer restates statuses — it points at the generated `docs/DECISIONS_INDEX.md`. |
+| v2.2 | 2026-10-13 | Recorded the session-continuity design (`ADR-2026-021`, `Proposed`) as a beyond-the-build-order row, and added decisions 9–10: how a session boundary is detected, and which ledger fields a session-level record needs. |
+| v2.3 | 2026-10-13 | Closed decision 7: `ADR-2026-017` is `Superseded` by `ADR-2026-019` (which implemented it), and the hand-written `docs/decisions/index.md` no longer restates statuses — it points at the generated `docs/DECISIONS_INDEX.md`. |

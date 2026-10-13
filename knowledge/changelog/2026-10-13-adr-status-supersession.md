@@ -58,7 +58,28 @@ authoritative, and repeats no list and no status — so there is nothing left in
 drift. This is the owner's own principle applied: *point at the artifact rather than
 restate it verbatim*, so an agent consumes one authority instead of several copies.
 
-`REMAINING_WORK.md` decision 7 is closed and its change history records v2.2.
+`REMAINING_WORK.md` decision 7 is closed and its change history records v2.3.
 
-**Tests:** 624 without a database; coverage 82.2%. `harness doctor` clean (41 entries,
+## A live reproduction of decision 8, while resolving the merge
+
+Resolving this PR's conflict against `main` produced a failure worth recording, because
+the cause was proven rather than inferred. With the merge resolved but **not yet
+committed**, `tests/test_dashboard.py::test_guards_on_a_feature_branch_pass` failed —
+the exact environment dependency §5.2 describes. The evidence:
+
+```
+merge-base HEAD origin/main = bcccc14…   # the pre-merge tip, one commit behind
+→ guards reported `fail`; the test failed
+(create the merge commit)
+merge-base HEAD origin/main = 4740647…   # now the tip
+→ the same test passed, unchanged
+```
+
+**Nothing in the branch or the test changed between the two runs — only the checkout's
+position did.** That is decision 8's second consequence demonstrated on demand instead
+of described, and §5.2 now records the reproduction. The defect itself is still unfixed:
+it is a semantics question about the `branch` argument's contract, and it remains the
+owner's to decide.
+
+**Tests:** 624 without a database; coverage 82.2%. `harness doctor` clean (44 entries,
 0 problems), `harness provenance check` exit 0, `refresh_handoff.py --check` exit 0.
