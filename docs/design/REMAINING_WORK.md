@@ -22,97 +22,84 @@ read-budget: must-read
 
 ## 1. Where the build order stands
 
-`HARNESS_ARCHITECTURE.md` §9 lists six components. Three are implemented, merged
-and on `main`.
+`HARNESS_ARCHITECTURE.md` §9 lists six components. **All six are implemented and
+merged, and `main` is green.** Three further capabilities were built beyond the build
+order, because each closed a gap the project had recorded against itself.
 
 | # | Component | State | Landed |
 |---|---|---|---|
 | 1 | Extraction + index | **Done** | PR #2 → `ADR-2026-006`, `CHG-2026-005` |
 | 2 | Query API | **Done** | PR #4 → `ADR-2026-009`, `CHG-2026-008` |
-| 3 | Prompt compiler | **In review** | PR #5 → `ADR-2026-010`, `CHG-2026-009` |
-| 4 | Proposal schemas + effect gates | **Not started** | — |
-| 5 | Session ledger | **Not started** | — |
-| 6 | Instruction → prompt | **Not started** | — |
+| 3 | Prompt compiler | **Done** | PR #5 → `ADR-2026-010`, `CHG-2026-009` |
+| 4 | Proposal schemas + effect gates | **Done** | PR #9 → `ADR-2026-012`, `CHG-2026-013` |
+| 5 | Session ledger | **Done** | PR #10 → `ADR-2026-013`, `CHG-2026-014` |
+| 6 | Instruction → prompt | **Done** | PR #14 → `ADR-2026-018`, `CHG-2026-018` |
 
-What each completed step provides:
+Beyond the build order:
+
+| Capability | State | Landed |
+|---|---|---|
+| Usage dashboard | **Done** | PR #7 → `ADR-2026-011`, `CHG-2026-011` |
+| Runtime dependency audit | **Done** | PR #11 → `CHG-2026-015` |
+| Purpose and framing | **Done** | PR #13 → `CHG-2026-017`, `docs/PURPOSE.md` |
+| Code provenance | **Done** | PR #15 → `ADR-2026-019`, `CHG-2026-019` |
+
+What each build-order step provides:
 
 | Step | Provides | Entry point |
 |---|---|---|
 | 1 | committed git → normalized model → derived Postgres index, proven rebuild-identical | `harness index build\|verify\|status` |
 | 2 | lookups answered in SQL; element-wise scope matching | `harness query …` |
 | 3 | work item + budget → deterministic prompt + content-bound fingerprint | `harness compile <id> --budget N` |
+| 4 | a versioned proposal schema and gates enforcing §7.1's rules; executes nothing | `harness propose schema\|validate\|gate` |
+| 5 | session records in `git notes`, bound to commits, with a derived mirror | `harness ledger …` |
+| 6 | instruction → work item, or a clarification request; calls no model | `harness intent resolve` |
+| — | code → the decision that produced it, checked by hash | `harness provenance check\|map\|index` |
 
-## 2. What is next: step 4 — proposal schemas + effect gates
+## 2. What has already been built
 
-> **Status: PARKED (owner instruction, 2026-10-13). Do not start this.**
->
-> The owner asked for step 4 to be parked and to await an explicit request. An
-> agent must not begin it, speculatively prepare it, or prepare a branch for it.
-> This section exists so the next session knows the step is next **and** that
-> starting it now would be a violation, not a judgement call.
->
-> Everything already decided about it is recorded below, so the eventual session
-> does not have to re-derive the contract — only to build against it.
+Every build-order step has its own design note and decision record; read those rather
+than a summary here, which would be a second copy to keep in step. The map:
 
-The first step rated **Medium** risk, because it defines what a model may propose
-and how a proposal is checked before anything executes. Everything so far is pure
-code with no model in the loop; step 4 introduces the loop's contract.
+| Step | Design note | Decision |
+|---|---|---|
+| 1 Extraction + index | `EXTRACTION_INDEX.md` | `ADR-2026-006` |
+| 2 Query API | `QUERY_API.md` | `ADR-2026-009` |
+| 3 Prompt compiler | `PROMPT_COMPILER.md` | `ADR-2026-010` |
+| 4 Proposal gates | `PROPOSAL_GATES.md` | `ADR-2026-012` |
+| 5 Session ledger | `SESSION_LEDGER.md` | `ADR-2026-013` |
+| 6 Instruction → prompt | `INTENT_RESOLUTION.md` | `ADR-2026-018` |
+| Usage dashboard | `DASHBOARD.md` | `ADR-2026-011` |
+| Runtime dependencies | `RUNTIME_DEPENDENCIES.md` | `CHG-2026-015` |
+| Code provenance | `CODE_PROVENANCE.md` | `ADR-2026-019` |
+| Purpose and framing | `PURPOSE.md` | `CHG-2026-017` |
 
-The design constraints are already recorded:
+## 3. What remains, and what is genuinely undecided
 
-- `ADR-2026-005` — the harness invokes the model and performs every execution;
-  the model returns schema-validated proposals and executes nothing.
-- `HARNESS_ARCHITECTURE.md` §10.1, validated experimentally on Ollama 0.34.0:
-  native `format: <JSON Schema>` **enforces the schema at the sampling layer**,
-  and **schema is enforced while semantics are not**. Every adversarial model
-  returned a *valid* proposal that the attack had steered. The gates are
-  therefore where the real checking lives — structure is the provider's job,
-  meaning is the harness's.
-- §7 — prefer the *impossible* class over the *loud* class: remove a capability
-  rather than check for its misuse. No `push_to_main` tool; no write tool before
-  an approved work packet.
-- §1.1 — chain-of-thought is **not** validatable. Output and effect are.
+**The build order is complete.** What remains is not a next component; it is the
+`DecisionRequired` list in §5, plus one capability that is deliberately open:
 
-A concrete design question to settle before coding: the proposal schema is the
-contract, so it must be project-agnostic and versioned like `MODEL_VERSION` and
-`INDEX_SCHEMA_VERSION` are. A schema change invalidates recorded proposals.
+- **`ADR-2026-017` is `Proposed` while `ADR-2026-019` implements it.** The framing
+  record can now be marked `Accepted`, or left `Proposed` if the owner prefers — but
+  the two currently disagree in status about a capability that exists. Recorded as
+  decision 7 below.
 
-## 3. Then: step 5 — session ledger
-
-`git notes` + Postgres. Records the prompt fingerprint (step 3), the proposal,
-the verdict, and the effect. `git notes` survives a repository copy; Postgres
-alone does not — which is why §10 lists the metadata store as an open decision
-(option 4) even though `ADR-2026-001`'s entry-file pattern already carries the
-decision record.
-
-The fingerprint from step 3 is the join key: it is recorded *before* the model is
-called, so a ledger entry can prove what was sent rather than assert it.
-
-## 4. Last: step 6 — instruction → prompt
-
-`No` under "Deterministic?", **High** risk, and deliberately last. §9 says the
-design must not depend on it:
-
-> a human who writes the task ID directly bypasses step 6 entirely and loses
-> nothing.
-
-Intent classification is fuzzy; §8 records it as not achievable as stated. Do not
-let any other step depend on it.
-
-## 5. Open decisions — do not guess these
+## 4. Open decisions — do not guess these
 
 Each is `DecisionRequired`. None may be supplied by a plausible default.
 
 | # | Decision | Why it is blocking | Where recorded |
 |---|---|---|---|
 | 1 | **Budget unit** — is a model tokenizer adopted? | the compiler uses an exact word count today; adopting a tokenizer changes what every recorded budget means and makes old budgets incomparable | `ADR-2026-010` |
-| 2 | **PostgreSQL version** for the index | no authoritative document fixes one, so no version is asserted in code or in CI beyond the `postgres:16` image the test job uses as a fixture | `ADR-2026-006` |
-| 3 | **Entry location** — `docs/DECISIONS_INDEX.md` says entries live in `knowledge/decisions/`, but `harness.toml` sets `decisions = "docs/decisions"` | the generated header contradicts the configuration; entries were placed per the config and the header text left unchanged | open |
-| 4 | **`workflow` scope for agent sessions** | a token without it cannot push `.github/workflows/**`; SSH works but is a workaround | open |
-| 5 | **Postgres locality / index lifecycle** | §10 options 1–2; step 1 chose rebuild-on-demand implicitly by having no long-running service | `HARNESS_ARCHITECTURE.md` §10 |
-| 6 | **`harness ci` has no consumer pipeline** | invoked in a repository other than the harness it runs the *harness's own* stages — wheel build, `mypy src`, `pytest tests/` — and fails with a misleading message. See §6.1 | open |
+| 2 | **PostgreSQL supported version range** | no authoritative document fixes one, so none is asserted; the `postgres:16` image in CI is a **test fixture, not a support claim** | `ADR-2026-014` |
+| 3 | ~~Entry location~~ | **CLOSED** — the generated header was hardcoded; it now reads the configured path | `CHG-2026-016` |
+| 4 | **`workflow` scope for agent sessions** | no `workflow` scope, so `.github/workflows/**` is pushed over SSH with the owner's key. Recommendation: a narrow, revocable fine-grained token — **not** widening this one, which carries `admin:public_key` | `ADR-2026-015` |
+| 5 | **Postgres locality / index lifecycle** | status quo recorded: **rebuild-on-demand**, no service. Locality and any future service remain the owner's | `ADR-2026-014` |
+| 6 | **`harness ci` has no consumer pipeline** | **`Proposed`, not fixed**: in a consumer it runs the harness's own stages and misdiagnoses the consumer as broken. Refuse clearly vs make it configurable. See §5.1 | `ADR-2026-016` |
+| 7 | **`ADR-2026-017` status** | it is `Proposed` and describes the code↔decision link, which `ADR-2026-019` has now implemented: the two records disagree in status about a capability that exists | `ADR-2026-017` |
+| 8 | **`harness dashboard run` guard scope** | the guard check inspects the *live repository* regardless of the `branch` argument, so it can report a failure the caller never asked about — and one test is environment-dependent as a result. See §5.2 | open |
 
-### 5.1 A consumer test found what the unit tests could not
+### 4.1 A consumer test found what the unit tests could not
 
 A throwaway consumer repository was built to share nothing with `mr_bera` — a
 `TASK` prefix with grammar `P/T`, widths `3,4`, bundle at `kb/`, docs at
@@ -126,9 +113,9 @@ It also found the defect in decision 6 above, which no unit test could have: the
 tests run *inside* the harness repository, where the harness's own pipeline is
 correct.
 
-## 6. Housekeeping and environment traps
+## 5. Housekeeping and environment traps
 
-### 6.1 `harness ci` is not project-agnostic
+### 5.1 `harness ci` is not project-agnostic
 
 `harness ci` runs the harness's own pipeline wherever it is invoked — wheel build,
 `mypy src`, the `selfcheck` stages — so in a consumer it fails with a message that
@@ -157,7 +144,7 @@ Impact is bounded: CI runs `ci.yml`, not `harness ci`, and no shipped capability
 depends on it. Everything below was observed in a fresh consumer repository —
 see §5.1.
 
-### 6.2 `harness dashboard run` reports a guard failure the caller did not ask about
+### 5.2 `harness dashboard run` reports a guard failure the caller did not ask about
 
 `_guards` in `dashboard/report.py` calls `run_all(branch, …)`, but the `base-branch`
 guard inside it inspects the **live repository** regardless of the `branch` argument:
@@ -179,7 +166,7 @@ needs deciding first. Impact is bounded — it is a reporting inaccuracy in the
 dashboard, not a wrong permit or refusal — but it makes one test environment-
 dependent, which is the hazard this repository keeps paying for.
 
-### 6.3 Traps already paid for
+### 5.3 Traps already paid for
 Recorded because each has already cost time:
 
 - **Four merged remote branches** remain on GitHub (`feat/extraction-index`,
@@ -209,27 +196,35 @@ Recorded because each has already cost time:
   could not: a missing git identity in fixtures, and a coverage floor enforced
   against code CI never ran.
 
-## 7. How to verify the current state
+## 6. How to verify the current state
 
 ```bash
 cd <repo>
-pip install -e ".[dev,postgres]"
-harness doctor                                  # clean?
+pip install -e ".[dev,postgres,propose]"       # propose/postgres are optional extras
+export MRB_TEST_DSN="postgresql://…/a_throwaway_db"   # NEVER the real MRB_HARNESS_DSN
+
+harness doctor                                  # conformance, routing, entries
 harness guards                                  # refuses a protected branch, by design
+harness provenance check                        # code -> decision links verify
 python -m pytest -q                             # without a database
-MRB_TEST_DSN=... python -m pytest -q            # with one
+python -m pytest -q                             # with MRB_TEST_DSN set
 harness ci --workflow .github/workflows/ci.yml  # rehearsal + parity
 ```
 
-Expected on `main` after step 3 merges: `harness doctor` clean, `harness guards`
-refuses `main`, tests green, coverage above the 80% floor, `harness ci` passed.
+Expected on `main`: `doctor` **clean**, `guards` **fails on `main` by design**,
+`provenance check` exit 0, tests green, coverage above the 80% floor, `harness ci`
+**PASSED**.
 
-## 8. Change history
+**`MRB_TEST_DSN` must be a throwaway database.** The fixtures call `reset`, which
+drops tables; a fallback to `MRB_HARNESS_DSN` once destroyed a real index.
+
+## 7. Change history
 
 | Version | Date | Change |
 |---|---|---|
 | v1.0 | 2026-10-13 | Recorded the build-order state after steps 1–3, the step 4–6 contract, five open decisions and the environment traps. |
-| v1.1 | 2026-10-13 | Added decision 6 (`harness ci` is not project-agnostic) and §5.1, the fresh-consumer test result that found it. |
-| v1.4 | 2026-10-13 | Recorded §6.2: the dashboard's guard check inspects the live repository, making one test environment-dependent. |
+| v1.1 | 2026-10-13 | Added decision 6 (`harness ci` is not project-agnostic) and §4.1, the fresh-consumer test result that found it. |
+| v1.2 | 2026-10-13 | Marked step 4 **parked** by owner instruction. |
 | v1.3 | 2026-10-13 | Closed the blocker list: two mechanical defects fixed, four status-quo ADRs (`014`–`016`) recorded. |
-| v1.2 | 2026-10-13 | Marked step 4 **parked** by owner instruction: do not start it without an explicit request. Steps 4–6 unchanged otherwise. |
+| v1.4 | 2026-10-13 | Recorded §5.2: the dashboard's guard check inspects the live repository, making one test environment-dependent. |
+| v2.0 | 2026-10-13 | **All six build-order steps are done.** Replaced the historical §2–§4 with a map to each step's design note and decision, refreshed the decision table (entry-location closed; two new items), and corrected the verification section. |

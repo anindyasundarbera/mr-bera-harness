@@ -48,3 +48,15 @@ would be a false record.
 
 **Tests:** 513 without a database; coverage unchanged at 91.1%. Lint, format,
 `mypy --strict`, `harness doctor`, `harness guards` and `harness ci` all clean.
+
+## Follow-up: the handoff itself had gone stale
+
+Refreshing `docs/design/REMAINING_WORK.md` for this session's handoff found it
+described steps 1–3 as the state and steps 4–6 as "not started" — by then all six were
+merged. A handoff that is wrong is worse than none, because it is trusted.
+
+Corrected: the build-order table now lists all six plus the four capabilities built
+beyond it; the historical step 4–6 narrative is replaced by a map to each step's design
+note and decision record rather than a summary that would be a second copy to keep in
+step; the decision table shows entry-location **closed** and adds the two items this
+session surfaced; and the verification section no longer says "after step 3 merges".
