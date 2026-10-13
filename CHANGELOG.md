@@ -6,6 +6,29 @@
 
 ## 2026-10-13
 
+### Changed: Parked build-order step 4 by owner instruction
+
+*Recorded in the handoff that step 4 (proposal schemas + effect gates) is parked and must not be started without an explicit owner request, so a later session treats it as an instruction rather than a judgement call.*
+
+- **ID:** `CHG-2026-012`  
+- **Covers:** `MRB`
+
+The owner parked step 4 and will request it explicitly when wanted. An unrecorded
+"park" is exactly the transient instruction that the handoff document exists to
+make durable: the next session reads the build order, sees step 4 marked as next,
+and starts it.
+
+`docs/design/REMAINING_WORK.md` §2 now carries a **PARKED** notice stating that an
+agent must not begin step 4, speculatively prepare it, or prepare a branch for it,
+and that starting it would be a violation rather than a judgement call. The
+already-decided contract for the step is kept below the notice so the eventual
+session builds against it instead of re-deriving it.
+
+Nothing else changed: steps 5 and 6 remain not started, and the six
+`DecisionRequired` items are unchanged.
+
+Refs: HARNESS-REMAINING-001
+
 ### Added: Usage dashboard — run, record and view the harness in any repository
 
 *Added a shipped usage dashboard that runs the harness's existing checks, records each run as a file so history accumulates and status changes are visible, and renders one self-contained HTML page with no server, no network and no new dependency.*
