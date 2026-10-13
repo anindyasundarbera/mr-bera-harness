@@ -11,6 +11,8 @@ canonical JSON rendering with sorted keys and LF line endings, so two models are
 "identical" only when their content is identical.
 """
 
+# harness:decision ADR-2026-006 sha256:66679384f7b7
+
 from __future__ import annotations
 
 import hashlib

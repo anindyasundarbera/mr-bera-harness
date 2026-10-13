@@ -8,6 +8,8 @@ provenance of the build that wrote it (`commit_sha`, `model_version`, `digest`).
 database and rebuild from git" a real operation rather than a claim.
 """
 
+# harness:decision ADR-2026-009 sha256:a6d5f77e7cfb
+
 from __future__ import annotations
 
 #: Bumped with the DDL below. Written into `index_meta` so a stale or foreign

@@ -77,13 +77,18 @@ is meant to fix.
 - Runtime dependencies audited: Python ≥ 3.11, `git`, and PyYAML. No database, no
   server, no network.
 
-**Not yet true — and the gap that matters most:**
+**Recently closed — the gap this document previously named as the principal one:**
 
-- **Code has no provenance link to the decisions that produced it.** A file cannot
-  say *"this exists because of `ADR-2026-009`"*. The reasoning is recorded and the
-  code is recorded, but the edge between them is not. That edge is what would let a
-  reader move from a line of code to why it is that way — and it is the next thing
-  that would make "the codebase is alive" more than a description of its documents.
+- **Code can now declare the decision that produced it**, with the decision's anchor
+  hash (`ADR-2026-019`). Editing a decision flags every file that implements it, so
+  the link is checked rather than remembered. What it does *not* verify is stated in
+  `docs/design/CODE_PROVENANCE.md` §7: it checks the decision exists and has not moved,
+  **not** that the code implements it.
+
+**Still true:**
+
+- **An undeclared change remains invisible.** The mechanism makes a declared link
+  checkable; it does not compel declaration, and it does not infer one.
 - **Instruction → prompt (build-order step 6) resolves and refuses, but is not a
   classifier.** It finds identifiers an instruction names and asks when the answer is
   ambiguous. It does not infer intent from prose, and the architecture is explicit
