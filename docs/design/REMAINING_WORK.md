@@ -157,7 +157,29 @@ Impact is bounded: CI runs `ci.yml`, not `harness ci`, and no shipped capability
 depends on it. Everything below was observed in a fresh consumer repository —
 see §5.1.
 
-### 6.2 Traps already paid for
+### 6.2 `harness dashboard run` reports a guard failure the caller did not ask about
+
+`_guards` in `dashboard/report.py` calls `run_all(branch, …)`, but the `base-branch`
+guard inside it inspects the **live repository** regardless of the `branch` argument:
+`guard_base_branch_is_default` resolves `origin/main` and the merge-base from the
+checkout, not from the branch it was handed.
+
+Two consequences, both observed:
+
+- `collect(config, branch="feat/x")` can report `session guards: fail` because the
+  *working copy* is behind `main` — a fact unrelated to the branch being asked about.
+- The test `test_guards_on_a_feature_branch_pass` therefore depends on the state of
+  the repository it runs in. It passed only because the checkout was clean at the
+  time; an uncommitted merge made it fail.
+
+Not fixed here because the fix is a semantics question, not a typo: either
+`guard_base_branch_is_default` must accept the branch and the base to compare, or
+`_guards` must pass a synthetic base and say so. The `branch` argument's contract
+needs deciding first. Impact is bounded — it is a reporting inaccuracy in the
+dashboard, not a wrong permit or refusal — but it makes one test environment-
+dependent, which is the hazard this repository keeps paying for.
+
+### 6.3 Traps already paid for
 Recorded because each has already cost time:
 
 - **Four merged remote branches** remain on GitHub (`feat/extraction-index`,
@@ -208,5 +230,6 @@ refuses `main`, tests green, coverage above the 80% floor, `harness ci` passed.
 |---|---|---|
 | v1.0 | 2026-10-13 | Recorded the build-order state after steps 1–3, the step 4–6 contract, five open decisions and the environment traps. |
 | v1.1 | 2026-10-13 | Added decision 6 (`harness ci` is not project-agnostic) and §5.1, the fresh-consumer test result that found it. |
+| v1.4 | 2026-10-13 | Recorded §6.2: the dashboard's guard check inspects the live repository, making one test environment-dependent. |
 | v1.3 | 2026-10-13 | Closed the blocker list: two mechanical defects fixed, four status-quo ADRs (`014`–`016`) recorded. |
 | v1.2 | 2026-10-13 | Marked step 4 **parked** by owner instruction: do not start it without an explicit request. Steps 4–6 unchanged otherwise. |
