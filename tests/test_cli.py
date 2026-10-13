@@ -39,6 +39,7 @@ class TestSubcommandCoverage:
         "index",
         "query",
         "compile",
+        "dashboard",
         "doctor",
     }
 

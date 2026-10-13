@@ -122,7 +122,10 @@ committed git bytes into a normalized model, loads it into a derived PostgreSQL
 index, and proves rebuild-identity by dropping the database and rebuilding from
 git (`harness index verify`). Step 2 — the query API — answers lookups in SQL so
 they never reach a model. Step 3 — the prompt compiler — turns a work item and a
-budget into a deterministic prompt with a SHA-256 fingerprint. Steps 4–6 remain.
+budget into a deterministic prompt with a SHA-256 fingerprint. Step 3 — the prompt compiler — turns a work item and a budget into a deterministic
+prompt with a SHA-256 fingerprint. A **usage dashboard** ships alongside, so the
+harness's behaviour in any repository can be seen, recorded and compared across
+runs. Steps 4–6 of the build order remain.
 
 The PostgreSQL index is optional. Install the extra only if you want it:
 
@@ -139,6 +142,9 @@ harness query blocked  MRB-M06-S07      # is this blocked?
 harness query stops    --state BlockedOwner   # what is blocked, and by what?
 
 harness compile MRB-M06-S01 --budget 4000     # prompt + fingerprint
+
+harness dashboard run       # run the checks, record the run, write .harness/usage.html
+harness dashboard history   # list recorded runs, newest first
 ```
 
 `harness query` exits **3** when the index is unreachable, so "no answers" is

@@ -563,6 +563,83 @@ def cmd_compile(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Run the harness's checks, record them and render a self-contained dashboard.
+
+    A viewer, not an actor: it executes nothing on a model's behalf and mutates
+    nothing but its own run records and the rendered file.
+    """
+    from harness.dashboard.render import render_html  # noqa: PLC0415 - deferred
+    from harness.dashboard.report import collect  # noqa: PLC0415 - deferred
+    from harness.dashboard.store import (  # noqa: PLC0415 - deferred
+        load_history,
+        write_run,
+    )
+
+    try:
+        config = _config(args)
+    except ConfigError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+    out = Path(args.out) if args.out else config.root / ".harness" / "usage.html"
+    command = args.dashboard_command
+
+    if command == "history":
+        history = load_history(config.root)
+        if args.json:
+            print(json.dumps(list(history.runs), indent=2, default=str))
+        elif not len(history):
+            print("no runs recorded")
+        else:
+            for recorded_run in history.runs:
+                counts = recorded_run.get("counts", {})
+                print(
+                    f"{recorded_run.get('generated_at', ''):<26} "
+                    f"{(recorded_run.get('commit_sha') or '')[:12]:<13} "
+                    f"pass={counts.get('pass', 0)} fail={counts.get('fail', 0)} "
+                    f"unknown={counts.get('unknown', 0)}"
+                )
+        return 0
+
+    history = load_history(config.root)
+    if command == "render":
+        latest = history.latest
+        if latest is None:
+            print("no runs recorded; run `harness dashboard run` first", file=sys.stderr)
+            return 1
+        run: dict[str, Any] = latest
+    else:
+        recorded = collect(
+            config, dsn=args.dsn or os.environ.get("MRB_HARNESS_DSN"), branch=args.branch
+        )
+        run = recorded.as_dict()
+        path = write_run(config.root, run)
+        if not args.quiet:
+            print(f"recorded {path}")
+        # Re-load so the rendered history includes the run just written.
+        history = load_history(config.root)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        render_html(run, history=history.runs, transitions=history.transitions()),
+        encoding="utf-8",
+    )
+
+    if not args.quiet:
+        counts = run.get("counts", {})
+        print(
+            f"{out}  pass={counts.get('pass', 0)} fail={counts.get('fail', 0)} "
+            f"unknown={counts.get('unknown', 0)}"
+        )
+        if not run.get("healthy", False):
+            for check in run.get("checks", []):
+                if check.get("status") == "fail":
+                    print(f"  FAIL  {check['name']}: {check.get('detail', '')}")
+            return 1
+    return 0 if run.get("healthy", False) else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="harness",
@@ -683,6 +760,31 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="emit JSON instead of the prompt")
     p.add_argument("--manifest", action="store_true", help="emit the audit manifest only")
     p.set_defaults(func=cmd_compile)
+
+    p = sub.add_parser("dashboard", help="record and view harness usage for a repository")
+    dash_sub = p.add_subparsers(dest="dashboard_command", required=True)
+
+    dash_common = argparse.ArgumentParser(add_help=False)
+    dash_common.add_argument("--dsn", help="PostgreSQL DSN (default: $MRB_HARNESS_DSN)")
+    dash_common.add_argument("--out", help="output HTML path (default: .harness/usage.html)")
+    dash_common.add_argument("--quiet", action="store_true", help="print nothing on success")
+
+    run_cmd = dash_sub.add_parser(
+        "run", parents=[dash_common], help="run the checks, record the run, write the dashboard"
+    )
+    run_cmd.add_argument("--branch", help="check as if on this branch")
+
+    render_cmd = dash_sub.add_parser(
+        "render", parents=[dash_common], help="re-render the dashboard from recorded runs"
+    )
+    render_cmd.set_defaults(func=cmd_dashboard)
+
+    history_cmd = dash_sub.add_parser(
+        "history", parents=[dash_common], help="print recorded runs, newest first"
+    )
+    history_cmd.add_argument("--json", action="store_true", help="emit JSON")
+
+    p.set_defaults(func=cmd_dashboard)
 
     p = sub.add_parser("doctor", help="end-to-end health summary")
     p.set_defaults(func=cmd_doctor)
