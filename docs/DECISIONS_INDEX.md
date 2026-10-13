@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-017` | 2026-10-13 | Propose linking source code to the decisions that produced it | Proposed | — |
 | `ADR-2026-013` | 2026-10-13 | Session records live in git notes, and the ledger never executes | Accepted | — |
 | `ADR-2026-012` | 2026-10-13 | The gates validate against JSON Schema via the standard library, and may not execute | Accepted | — |
 | `ADR-2026-011` | 2026-10-13 | The usage dashboard is a static viewer, not a live actor | Accepted | — |

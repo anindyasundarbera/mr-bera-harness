@@ -6,6 +6,71 @@
 
 ## 2026-10-13
 
+### Added: Stated the repository's purpose, and the gap it does not yet close
+
+*Added docs/PURPOSE.md framing the repository as a live system rather than a folder of documents, stating separately what is implemented and what is aimed at; proposed code-to-decision provenance as the missing edge, and fixed a duplicated sentence and a stale status section in the README.*
+
+- **ID:** `CHG-2026-017`  
+- **Covers:** `MRB`
+
+The framing of the repository was implicit. It is now stated, and — more
+importantly — split into what is true and what is aimed at.
+
+## `docs/PURPOSE.md`
+
+The problem: a running system tells you what it is doing, a codebase does not. The
+knowledge that produced the code lives in heads, chat threads, or documents nobody
+re-reads, and prose has no exit code — so a stale description is indistinguishable
+from a current one.
+
+The intention: treat the repository as a **live system**. The distinguishing
+property is not that answers exist, but that they are **computed and refutable** — a
+document that disagrees with the repository fails `harness doctor`, a decision
+without its reasoning fails the entry schema, an undecided value stops work with an
+exit code.
+
+The most useful part is §4, which separates two lists. Implemented and tested:
+decision records with reasoning, `harness context`, the extract/query layer, the
+prompt compiler, proposal gating, the session ledger, the dashboard, and an audited
+runtime. Not yet true, and named as the principal gap:
+
+> **Code has no provenance link to the decisions that produced it.** A file cannot
+> say *"this exists because of `ADR-2026-009`"*. The reasoning is recorded and the
+> code is recorded, but the edge between them is not.
+
+## `ADR-2026-017` — `Proposed`
+
+Records that gap as something aimed at rather than implied. It proposes that a
+source file may **declare** the decisions binding it, checked by CI so the link
+cannot rot — and it lists four things deliberately left undecided (the mechanism,
+the direction, whether it is mandatory, how it is surfaced). It also states a risk
+worth weighing: a declaration checked for *existence* is still not checked for
+*truth*.
+
+`Proposed`, not `Accepted`, for the reason established in `CHG-2026-016`: nothing is
+implemented, and an `Accepted` record describing unimplemented behaviour is a false
+record.
+
+## Two README defects, fixed
+
+- The Status section contained a **duplicated sentence** — the Step 3 description
+  appeared twice, a real instance of the staleness this framing is about.
+- The Status section was several steps behind, describing steps 1–3 while five were
+  merged. It now states steps 1–5, names step 6 as not built, and links the purpose.
+
+## A cross-branch dependency, caught and removed
+
+This branch was started from `main` while `fix/close-blockers` was still open, and
+initially referenced `ADR-2026-015`, `ADR-2026-016` and `CHG-2026-016`, which live on
+that unmerged branch. That is branch stacking by reference — the hazard the guards
+exist for — and it would have broken `harness doctor` on this branch, since a cited
+record would not exist.
+
+Every reference was checked mechanically: each cited record either exists on `main`
+or is created by this branch. This branch now stands alone.
+
+Refs: ADR-2026-017
+
 ### Added: Recorded the runtime dependency audit
 
 *Audited and documented what the harness needs to run on any device or container, proving in a venv containing only PyYAML that no database, server or network is required and that every optional capability fails loudly with the fix in its message.*

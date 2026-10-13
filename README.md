@@ -1,6 +1,12 @@
 # mr-bera-harness
 
-Deterministic context and guard layer for AI coding agents.
+**A repository that answers questions about itself.**
+
+A codebase is a pile of files that were accurate the day they were written. Ask it
+what it is for, why it is shaped that way, or what previous sessions did, and the
+answer is a conversation — or a guess. This harness treats the repository as a
+**live system**: the answers are artifacts a programme can read, a test can check,
+and an agent can be handed verbatim.
 
 > **The LLM proposes; the harness disposes.**
 
@@ -8,6 +14,10 @@ A model returns schema-validated *proposals* and executes nothing. This harness
 validates each proposal and performs every mutation with ordinary code, so the
 validation surface is testable rather than a model's reasoning. That is what
 makes "every action validated" achievable rather than aspirational.
+
+**Why this exists, and how much of it is true today, is stated plainly in
+[docs/PURPOSE.md](docs/PURPOSE.md)** — including the one gap it does not yet close:
+there is no checked link from a line of code to the decision that produced it.
 
 ## What it does
 
@@ -17,6 +27,11 @@ answers those with code, so they never reach a model and never cost tokens.
 
 It also **stops**. When a value is undecided, the resolver exits non-zero and
 names the blocker instead of letting an agent proceed on a plausible guess.
+
+And it is **checked**: a document that disagrees with the repository fails
+`harness doctor`, a decision that lacks its reasoning fails the entry schema, and
+an undecided value stops work with an exit code rather than being filled in with
+something plausible. That is what makes these artifacts living rather than prose.
 
 ## Install
 
@@ -124,22 +139,18 @@ if result.must_stop:
 
 ## Status
 
-`v0.1.0`. The deterministic layers — OKF reading, routing, entry validation,
-local CI rehearsal, session guards — are implemented and tested.
+`v0.1.0`. Build-order steps 1–5 of
+[docs/design/HARNESS_ARCHITECTURE.md](docs/design/HARNESS_ARCHITECTURE.md) §9 are
+implemented and merged: extraction and a derived index that rebuilds identically
+from git; a query API that answers lookups in SQL; a prompt compiler whose
+fingerprint binds exactly what was sent; proposal schemas and effect gates that
+enforce the rules the architecture enumerates and execute nothing; and a session
+ledger in `git notes` that survives a repository copy. A **usage dashboard** ships
+alongside. **Step 6 — instruction→prompt — is not built**, and the architecture says
+nothing may depend on it.
 
-Build-order steps 1–3 are implemented. Step 1 — extraction and index — parses
-committed git bytes into a normalized model, loads it into a derived PostgreSQL
-index, and proves rebuild-identity by dropping the database and rebuilding from
-git (`harness index verify`). Step 2 — the query API — answers lookups in SQL so
-they never reach a model. Step 3 — the prompt compiler — turns a work item and a
-budget into a deterministic prompt with a SHA-256 fingerprint. Step 3 — the prompt compiler — turns a work item and a budget into a deterministic
-prompt with a SHA-256 fingerprint. A **usage dashboard** ships alongside, so the
-harness's behaviour in any repository can be seen, recorded and compared across
-runs. Step 4 — proposal schemas and effect gates — makes the propose/dispose split
-code: a model proposes, the harness validates against JSON Schema and the rules
-architecture §7.1 enumerates, and **nothing in that step executes**. Step 5 records
-each session in `git notes` — so the history survives a repository copy — with an
-optional Postgres mirror derived from it. Step 6 remains.
+**What this repository is for, and how much of it is true today, is stated plainly
+in [docs/PURPOSE.md](docs/PURPOSE.md)** — including the gap it does not yet close.
 
 The PostgreSQL index is optional. Install the extra only if you want it:
 
