@@ -172,6 +172,23 @@ read_budget: reference-only
 """,
         "## Contracts\n\nBody.\n",
     )
+    write_concept(
+        root,
+        "knowledge/modules/M06/unknowns/rubric.md",
+        """
+type: Unknown
+module: MRB-M06
+covers: [MRB-M06]
+blocks: [MRB-M06-S07]
+state: BlockedOwner
+blocker: DESIGN-RUBRIC-01
+read_budget: must-read
+if_you_guess: The rubric becomes untestable opinion.
+must_not_do:
+  - Define a quality threshold.
+""",
+        "## Why this blocks\n\nThe pass definition is undecided.\n",
+    )
     (root / "docs" / "GAP_REGISTER.md").write_text(
         "# Gaps\n\n"
         "| Gap ID | State | Note |\n"

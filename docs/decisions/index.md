@@ -12,3 +12,4 @@ repository makes about its own delivery stay in that repository.
 * [ADR-2026-007](ADR-2026-007-ci-runner-invoking-root.md) - the local CI runner resolves the invoking repository, not the package directory.
 * [ADR-2026-008](ADR-2026-008-build-does-not-gate-on-session-guards.md) - the build rehearsal does not gate on session guards.
 * [ADR-2026-009](ADR-2026-009-element-wise-scope-index.md) - scope fields are indexed element-wise, so a scope query cannot over-select.
+* [ADR-2026-010](ADR-2026-010-budget-unit-and-no-default.md) - prompt budgets are exact word counts, and the budget is caller-supplied.
