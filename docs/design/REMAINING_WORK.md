@@ -178,6 +178,11 @@ Recorded because each has already cost time:
   parity check). Resolve from `Path.cwd()`, never `Path(__file__)`.
 - **`harness ci` cannot pass on `main` if the session guards are a build stage** —
   settled by `ADR-2026-008`. The two gates answer different questions.
+- **`harness ci` is not project-agnostic** — it runs the harness's own stages in a
+  consumer. Recorded as `Proposed` in `ADR-2026-016`; it will misdiagnose a consumer
+  as broken until the owner chooses the fix.
+- **A generated file must not state a location it was not told** — the header text
+  was hardcoded. Fixed; the renderers now read the configured path.
 - **"Works locally" is not evidence.** CI caught two defects a green local run
   could not: a missing git identity in fixtures, and a coverage floor enforced
   against code CI never ran.
@@ -203,4 +208,5 @@ refuses `main`, tests green, coverage above the 80% floor, `harness ci` passed.
 |---|---|---|
 | v1.0 | 2026-10-13 | Recorded the build-order state after steps 1–3, the step 4–6 contract, five open decisions and the environment traps. |
 | v1.1 | 2026-10-13 | Added decision 6 (`harness ci` is not project-agnostic) and §5.1, the fresh-consumer test result that found it. |
+| v1.3 | 2026-10-13 | Closed the blocker list: two mechanical defects fixed, four status-quo ADRs (`014`–`016`) recorded. |
 | v1.2 | 2026-10-13 | Marked step 4 **parked** by owner instruction: do not start it without an explicit request. Steps 4–6 unchanged otherwise. |
