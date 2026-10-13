@@ -46,9 +46,12 @@ which no longer exists, and `mypy tools`, which `ci.yml` does not use.
    `guards/session.py`. `run_stage` runs there.
 2. `check_parity` reads the workflow file. `cmd_ci` uses it for `--workflow`, and
    a parity failure fails the run rather than printing a note.
-3. The `selfcheck` stages call existing commands — `harness guards`,
-   `harness entries generate --check`, `harness context` — and `mypy src` matches
-   `ci.yml`.
+3. The `selfcheck` stages call existing commands — `harness entries generate
+   --check`, `harness context`, `harness doctor` — and `mypy src` matches
+   `ci.yml`. The **session** guards are deliberately *not* a stage: they refuse a
+   protected branch (ADR-2026-004), so a stage invoking them fails on `main` by
+   definition, and would fail CI on every push to the default branch. See
+   ADR-2026-008.
 4. `Step.ok_exit_codes` records that a deliberate non-zero result is a passing
    check: `harness context` exits 3 or 4 *by design*, so a rehearsal that
    insisted on 0 could not assert the exit-code contract.

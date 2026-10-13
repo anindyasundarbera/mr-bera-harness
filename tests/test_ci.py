@@ -140,6 +140,23 @@ class TestRepoRootRegression:
         for step in selfcheck.steps:
             assert not any("tools/" in arg for arg in step.argv), step.label
 
+    def test_selfcheck_does_not_gate_the_build_on_session_guards(self) -> None:
+        """A build check must be able to pass on the default branch.
+
+        The session guards refuse a protected branch (ADR-2026-004), so wiring
+        them into a stage made `harness ci` — and CI on every push to `main` —
+        fail by definition. Session preconditions and tree invariants are
+        different questions and are enforced in different places.
+        """
+        selfcheck = next(s for s in stages() if s.name == "selfcheck")
+        for step in selfcheck.steps:
+            assert "guards" not in step.argv, step.label
+
+    def test_no_stage_invokes_the_session_guards(self) -> None:
+        for stage in stages():
+            for step in stage.steps:
+                assert "guards" not in step.argv, f"{stage.name}/{step.label}"
+
     def test_mypy_stage_targets_the_package_like_ci(self) -> None:
         typecheck = next(s for s in stages() if s.name == "typecheck")
         assert "src" in typecheck.steps[0].argv
