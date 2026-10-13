@@ -86,8 +86,35 @@ is exactly what happened once during development. The fixtures now require
 `MRB_TEST_DSN` with no fallback, and a test run with only `MRB_HARNESS_DSN` set
 leaves the real index intact (verified: all 12 rows survived).
 
+## CI now runs a database, because the coverage floor said so
+
+The first CI run of this branch failed **all three test jobs while every test
+passed** (`338 passed, 66 skipped`). The cause was the coverage floor:
+
+```
+FAIL Required test coverage of 80.0% not reached. Total coverage: 79.02%
+```
+
+Requiring a separate test DSN also meant CI skipped the whole derived-store layer
+— ~350 statements in the modules this step adds — so the floor was being enforced
+against code CI never ran. Both symptoms have one cause.
+
+The `test` job now runs a `postgres:16` service and installs the `postgres`
+extra, so the index and query tests execute instead of skipping. Coverage rises
+from 79% to **91%** as a side effect, which is the honest measure: the code is
+now actually exercised rather than excluded.
+
+Two alternatives were rejected. Silencing the derived-store modules in the
+coverage config would raise the number by measuring less — the opposite of what a
+floor is for. Lowering the floor below 80% would make the number pass while
+leaving the layer untested. Neither makes anything more correct.
+
+Verified locally against both DSN states before pushing: **338 passed** without a
+database, **404 passed / 91.16%** with one. The rehearsal (`harness ci`) runs no
+coverage gate, so it is green either way.
+
 **Tests:** 338 passing without a DSN; **404 with a live PostgreSQL**, coverage
-88.2%. Lint, format, `mypy --strict`, `harness doctor`, `harness guards` and
+91.2%. Lint, format, `mypy --strict`, `harness doctor`, `harness guards` and
 `harness ci` all clean.
 
 ### Fixed: The build rehearsal no longer fails on the default branch

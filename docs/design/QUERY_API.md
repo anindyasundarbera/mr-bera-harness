@@ -125,3 +125,20 @@ name reports the mistyped field rather than a connection failure.
 | Version | Date | Change |
 |---|---|---|
 | v1.0 | 2026-10-13 | Build-order step 2 implemented: nine lookups, element-wise scope matching, resolver cross-check. |
+
+## 9. How this is verified in CI
+
+The index and query layers need a database, so the `test` job runs a
+`postgres:16` service and the tests take their DSN from `MRB_TEST_DSN`.
+
+Without that, the whole derived-store layer skipped in CI — which the coverage
+floor exposed: coverage read 79.02% against an 80% floor while every test passed.
+The floor was being enforced against code CI never ran. Suppressing those modules
+in the coverage config, or lowering the floor, would both have made the number
+pass by measuring less. Running the database is the fix; coverage is 91% as a
+result.
+
+`MRB_TEST_DSN` is deliberately a *separate* variable from `MRB_HARNESS_DSN`: the
+fixtures call `reset`, and a fallback meant a test run could destroy a real
+index. That is not hypothetical — it happened once.
+
