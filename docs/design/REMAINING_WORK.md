@@ -30,9 +30,9 @@ order, because each closed a gap the project had recorded against itself.
 | Fact | Value |
 |---|---|
 | Derived by | `mr-bera-harness 0.1.0`, via `tools/refresh_handoff.py` |
-| OKF concepts | 23 |
-| Entries | 44 (0 problem(s)) |
-| Test modules | 23 |
+| OKF concepts | 24 |
+| Entries | 46 (0 problem(s)) |
+| Test modules | 24 |
 | Provenance declarations | 2 |
 | Commit types accepted | 11 |
 <!-- harness:handoff-facts:end -->
