@@ -139,18 +139,19 @@ if result.must_stop:
 
 ## Status
 
-`v0.1.0`. Build-order steps 1–5 of
+`v0.2.0`. **All six build-order steps** of
 [docs/design/HARNESS_ARCHITECTURE.md](docs/design/HARNESS_ARCHITECTURE.md) §9 are
 implemented and merged: extraction and a derived index that rebuilds identically
 from git; a query API that answers lookups in SQL; a prompt compiler whose
 fingerprint binds exactly what was sent; proposal schemas and effect gates that
-enforce the rules the architecture enumerates and execute nothing; and a session
-ledger in `git notes` that survives a repository copy. **Step 6 — instruction→prompt
-— resolves a human instruction to a work item, and asks instead of guessing** when the
-answer is not unique. A **usage dashboard** ships alongside. All six build-order
-components are implemented. Beyond the build order, **a file can declare the decision
-that produced it** — checked against the decision's anchor hash, so a revised decision
-flags every implementing file as stale (`harness provenance`).
+enforce the rules the architecture enumerates and execute nothing; a session
+ledger in `git notes` that survives a repository copy; and **instruction→prompt**,
+which resolves a human instruction to a work item and asks instead of guessing when
+the answer is not unique. A **usage dashboard** ships alongside. Beyond the build
+order, **a file can declare the decision that produced it** — checked against the
+decision's anchor hash, so a revised decision flags every implementing file as
+stale (`harness provenance`) — and the live handoff's **mechanical facts are
+generated**, so they cannot decay (`harness`'s `tools/refresh_handoff.py`).
 
 **What this repository is for, and how much of it is true today, is stated plainly
 in [docs/PURPOSE.md](docs/PURPOSE.md)** — including the limitations it still carries.
