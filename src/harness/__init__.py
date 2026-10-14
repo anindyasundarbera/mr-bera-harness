@@ -18,6 +18,6 @@ from __future__ import annotations
 from harness.config import Config, load_config
 from harness.routing import parent_chain
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["Config", "load_config", "parent_chain", "__version__"]
