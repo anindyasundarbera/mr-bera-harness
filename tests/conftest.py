@@ -57,6 +57,21 @@ protected_branches = ["main", "master"]
 types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
 """
 
+#: A routing contract carrying a state-ownership matrix, for the tests that exercise
+#: check 6. Without it `state_ownership()` returns empty and check 6 is skipped — so a
+#: test that depends on check 6 must place this, or it would assert nothing.
+ROUTING_DOC = """\
+# Routing contract (test fixture)
+
+## 4. State-ownership matrix
+
+| Key | Owning module | Meaning |
+|---|---|---|
+| `commerce-truth` | MRB-M03 | Product/variation records, price, stock, order lifecycle state |
+| `editorial-policy` | MRB-M01 | Allowed/prohibited content, stance/tone rules, escalation |
+| `job-orchestration` | MRB-M06 | WorkflowRecord, ArtifactRecord, queue/lease semantics |
+"""
+
 
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
@@ -70,6 +85,7 @@ def project(tmp_path: Path) -> Path:
     for sub in ("docs", "knowledge/changelog", "knowledge/decisions", "tests", "tools"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     (root / "harness.toml").write_text(HARNESS_TOML, encoding="utf-8")
+    (root / "docs" / "DOCUMENT_ROUTING.md").write_text(ROUTING_DOC, encoding="utf-8")
     return root
 
 

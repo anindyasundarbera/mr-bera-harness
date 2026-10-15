@@ -82,7 +82,19 @@ class TestStructuralChecks:
         )
         assert run(project).violations == []
 
-    def test_two_modules_claiming_one_key_detected(self, project: Path) -> None:
+    def test_two_modules_disclaiming_one_key_is_correct(self, project: Path) -> None:
+        """A shared key may be disclaimed by many modules; it is not a conflict.
+
+        This test previously asserted the opposite, and the inversion is the point:
+        `do_not_use_for` is a **disclaimer** (`DOCUMENT_ROUTING.md` §4 usage rule —
+        "an M06 document listing `commerce-truth` means this document must not be
+        used to define price — that is M03's"). Under the old reading check 6 could
+        never pass for a repository with more than one module, because every module
+        correctly disclaims the same shared keys. M06 passed only because it was the
+        only module.
+        """
+        # Neither module owns `commerce-truth` (MRB-M03 does, per the fixture contract),
+        # so both disclaiming it is exactly what §4's usage rule prescribes.
         write_concept(
             project / "knowledge",
             "a.md",
@@ -91,9 +103,48 @@ class TestStructuralChecks:
         write_concept(
             project / "knowledge",
             "b.md",
+            "type: T\nmodule: MRB-M01\ndo_not_use_for: [commerce-truth]",
+        )
+        assert run(project).violations == []
+
+    def test_a_module_disclaiming_a_key_it_owns_is_detected(self, project: Path) -> None:
+        """The real conflict: a module disclaims the state it is the owner of.
+
+        `MRB-M03` owns `commerce-truth` per the routing contract's matrix, so
+        disclaiming it says "do not use me to define what I own" — incoherent, and a
+        reader cannot tell which statement binds.
+        """
+        write_concept(
+            project / "knowledge",
+            "a.md",
             "type: T\nmodule: MRB-M03\ndo_not_use_for: [commerce-truth]",
         )
-        assert run(project).violations
+        assert 6 in checks(run(project))
+
+    def test_a_disclaimer_naming_an_unknown_key_is_detected(self, project: Path) -> None:
+        """A disclaimer must name a key the contract defines, or it warns nobody."""
+        write_concept(
+            project / "knowledge",
+            "a.md",
+            "type: T\nmodule: MRB-M06\ndo_not_use_for: [commerce-typo]",
+        )
+        assert 6 in checks(run(project))
+
+    def test_either_spelling_of_the_field_is_read(self, project: Path) -> None:
+        """Reading one spelling made the check vacuous for the other.
+
+        The contract writes the field `do-not-use-for`; OKF concepts in practice use
+        `do_not_use_for`. Reading only one reports **zero violations while checking
+        nothing** — worse than a wrong answer, because it looks like a pass.
+        """
+        write_concept(
+            project / "knowledge",
+            "a.md",
+            "type: T\nmodule: MRB-M03\ndo-not-use-for: [commerce-truth]",
+        )
+        assert 6 in checks(run(project)), (
+            "the hyphenated spelling was ignored, so this incoherent disclaimer passed unseen"
+        )
 
 
 class TestHelpers:

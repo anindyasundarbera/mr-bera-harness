@@ -76,6 +76,9 @@ class Paths:
     decisions: str = "knowledge/decisions"
     tests: str = "tests"
     tools: str = "tools"
+    #: The routing contract. It carries the state-ownership matrix that check 6
+    #: reads — the authoritative statement of which module owns which key.
+    routing: str = "docs/DOCUMENT_ROUTING.md"
 
 
 @dataclass(frozen=True)
