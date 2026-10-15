@@ -12,7 +12,8 @@ Checks:
   3. At most one `canonical: true` per (module, class).
   4. Every `covers` decomposition ID exists in PROJECT_DECOMPOSITION.md.
   5. Every `module` exists in MODULE_REGISTRY.md.
-  6. No `do_not_use_for` state-ownership key is claimed by two modules.
+  6. Every `do_not_use_for` key is a real state-ownership key, and no module
+     disclaims a key it owns. Ownership is read from the routing contract's matrix.
   7. Every `depends_on` target resolves to an existing document or concept.
   8. `id` matches the document's `> ID:` line where both are present.
 
@@ -117,6 +118,32 @@ def known_modules(path: Path) -> set[str]:
     return set(MODULE_ID_RE.findall(path.read_text(encoding="utf-8")))
 
 
+#: `| \`key\` | MRB-Mnn | meaning |` — the state-ownership matrix in the routing
+#: contract. The owner cell may carry a parenthetical (`MRB-M10 (DOC-IA-001)`), so
+#: the module ID is captured rather than the whole cell.
+_OWNERSHIP_ROW_RE = re.compile(
+    r"^\|\s*`(?P<key>[a-z0-9-]+)`\s*\|\s*(?P<owner>MRB-M\d{2})\b", re.MULTILINE
+)
+
+
+def state_ownership(path: Path) -> dict[str, str]:
+    """Map state-ownership key -> owning module, read from the routing contract.
+
+    This is the authority `DOCUMENT_ROUTING.md` §4 declares ("Each key has exactly
+    one owning module"). Check 6 must read it rather than infer ownership from the
+    concepts, because a concept's `do_not_use_for` is a **disclaimer** — the §4 usage
+    rule says an M06 document listing `commerce-truth` means "this document must not
+    be used to define price — that is M03's". Inferring ownership from a disclaimer
+    inverts its meaning.
+    """
+    if not path.exists():
+        return {}
+    return {
+        m.group("key"): m.group("owner")
+        for m in _OWNERSHIP_ROW_RE.finditer(path.read_text(encoding="utf-8"))
+    }
+
+
 GAP_ROW_RE = re.compile(r"^\|\s*(GAP-[A-Z]+-\d{3})\s*\|", re.MULTILINE)
 
 # The state vocabulary from GAP_REGISTER.md section 1.
@@ -157,11 +184,28 @@ def gap_states(config: Config, path: Path | None = None) -> dict[str, str]:
     return states
 
 
+def _do_not_use_for(concept: Any) -> list[str]:
+    """Read `do_not_use_for` from either spelling the routing contract permits.
+
+    `DOCUMENT_ROUTING.md` §2 writes the field as `do-not-use-for` (hyphens); OKF
+    concepts in practice use `do_not_use_for` (underscores). The resolver already
+    accepts both (`resolve.py`), and check 6 must too — reading only one spelling
+    made the check **vacuous** for whichever spelling the project did not use, which
+    is worse than a wrong answer because it reports zero violations while checking
+    nothing.
+    """
+    raw = concept.frontmatter.get("do_not_use_for")
+    if raw is None:
+        raw = concept.frontmatter.get("do-not-use-for")
+    return [str(x) for x in (raw or [])]
+
+
 def validate(
     bundle_dir: Path,
     decomposition_ids: set[str] | None = None,
     modules: set[str] | None = None,
     gaps: dict[str, str] | None = None,
+    ownership: dict[str, str] | None = None,
 ) -> Report:
     """Run the routing checks over a bundle."""
     report = Report()
@@ -171,6 +215,7 @@ def validate(
     decomposition_ids = decomposition_ids or set()
     modules = modules or set()
     gap_states_map = gaps if gaps is not None else {}
+    ownership = ownership or {}
 
     try:
         bundle = Bundle(bundle_dir)
@@ -179,7 +224,6 @@ def validate(
         report.add(1, str(bundle_dir), f"bundle unreadable: {exc}")
         return report
 
-    owners: dict[str, set[str]] = {}
     canonical_seen: dict[tuple[str, str], str] = {}
 
     for cid, concept in sorted(concepts.items()):
@@ -260,33 +304,38 @@ def validate(
         if modules and module and module not in modules and module != "MRB-LRF":
             report.add(5, cid, f"module `{module}` not found in MODULE_REGISTRY.md")
 
-        # Check 6: ownership keys must be unique per module.
-        for key in fm.get("do_not_use_for") or []:
-            owners.setdefault(str(key), set()).add(owners_key(module, concept))
-
-    for key, claimants in sorted(owners.items()):
-        if len(claimants) > 1:
-            # A single module holding one key across several concepts is fine;
-            # two modules claiming the same key is a conflict.
-            distinct_modules = {c.split(":")[0] for c in claimants}
-            if len(distinct_modules) > 1:
+        # Check 6: a `do_not_use_for` key must be one the *owning module* may not
+        # define. Ownership is read from the routing contract's state-ownership
+        # matrix, never inferred from the frontmatter.
+        #
+        # The old form inferred ownership from the concepts themselves and treated a
+        # *listing* as a *claim*, so two modules correctly warning their agents about
+        # the same key were reported as a conflict — but §4's usage rule says a listing
+        # is the opposite: "this document must not be used to define price or stock —
+        # that is M03's". Under that reading the check could never pass for a
+        # repository with more than one module, because every module disclaims the same
+        # shared keys. M06 passed only because it was the only module.
+        for key in _do_not_use_for(concept):
+            if ownership and key not in ownership:
                 report.add(
                     6,
-                    key,
-                    f"claimed by multiple modules: {', '.join(sorted(distinct_modules))}",
+                    cid,
+                    f"`do_not_use_for` names `{key}`, which is not a state-ownership key "
+                    "in the routing contract's matrix; a disclaimer must name a real key",
                 )
+            elif ownership:
+                # A module may disclaim another module's key. It must not be the owner
+                # of the key it disclaims AND it must not disclaim a key nobody owns.
+                owner = ownership[key]
+                if module and module == owner:
+                    report.add(
+                        6,
+                        cid,
+                        f"`{module}` owns `{key}` but disclaims it; a module cannot "
+                        "disclaim a state it owns",
+                    )
 
     return report
-
-
-def owners_key(module: str, concept: Any) -> str:
-    """Identify the claiming module for an ownership key.
-
-    An `owner_module` key, when present, states which module actually owns the
-    state; otherwise the concept's own `module` is the claimant.
-    """
-    owning = concept.frontmatter.get("owner_module") or module
-    return f"{owning}:{concept.concept_id}"
 
 
 def validate_routing(config: Config) -> Report:
@@ -297,6 +346,7 @@ def validate_routing(config: Config) -> Report:
         known_decomposition_ids(decomposition),
         known_modules(module_registry),
         gap_states(config),
+        state_ownership(config.path("routing")),
     )
     check_doc_frontmatter(report, config.path("docs"))
     return report

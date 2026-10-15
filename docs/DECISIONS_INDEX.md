@@ -6,6 +6,7 @@
 
 | ID | Date | Title | Status | Supersedes |
 |---|---|---|---|---|
+| `ADR-2026-024` | 2026-10-15 | The routing ownership check reads the contract's matrix, and a disclaimer is not a claim | Accepted | — |
 | `ADR-2026-023` | 2026-10-14 | Release 0.2.0 is a minor bump, and the harness has no versioning policy yet | Accepted | — |
 | `ADR-2026-022` | 2026-10-13 | The package version is declared once, in the code | Accepted | — |
 | `ADR-2026-021` | 2026-10-13 | Session continuity needs capture before it can offer resume, and the harness cannot read a transcript | Proposed | — |
